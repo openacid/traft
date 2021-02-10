@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+option go_package = ".;traft";
+
+
+// Cmd is a log record
+message Cmd {
+    string Op = 10;
+    string Key = 20;
+
+    oneof Value {
+        string VStr = 31;
+        int64 VI64 = 32;
+
+        // cluster config change: adding/removing members.
+        ClusterConfig VClusterConfig = 33;
+    }
+}
+
+// TailBitmap is a bitmap that has all its leading bits set to `1`.
+// Thus it is compressed with an Offset of all-ones position and a trailing
+// bitmap.
+// It is used to describe Record dependency etc.
+message TailBitmap {
+    int64 Offset = 1;
+    repeated uint64 Words = 2;
+}
+
+// Record is a log record
+message Record {
+    // Log sequence number.
+    int64 Seq = 10;
+
+    // Cmd describes what this log does.
+    Cmd Cmd = 30;
+
+    // Overrides describes what previous logs this log record overrides.
+    TailBitmap Overrides = 40;
+}
+
+message ReplicateReply {
+
+}
+
+message Ballot {
+    int64 AcceptedTerm = 1;
+    int64 Term = 2;
+    // Seq is the max log seq
+    int64 Seq = 3;
+    int64 Id = 4;
+}
+
+
+message Node {
+    ClusterConfig Config = 1;
+    repeated Record Log = 2;
+
+    int64 Term = 3;
+    int64 AcceptedTerm = 4;
+    repeated ReplicaProgress Progresses = 5;
+
+}
+
+message ReplicaProgress {
+    TailBitmap Has = 1;
+    TailBitmap Committed = 2;
+    TailBitmap Applied = 3;
+}
+
+message ReplicaInfo {
+    int64 Id = 1;
+    string Addr = 2;
+}
+
+message ClusterConfig {
+    repeated ReplicaInfo Members = 11;
+    repeated uint64 Quorums = 21;
+}
+
+message VoteReq {
+    Ballot Bal = 1;
+    TailBitmap Has = 2;
+}
+
+message VoteReply {
+    // voter's term.
+    // If voter's term is greater, sender should upgrade its own term and retry.
+
+    // On which accepted term voter's log are written.
+    // If voter accepted term >= sender's accepted term,
+    // voter send back the logs that only voter has.
+    // Otherwise, voter's log can not be committed, no need to send.
+    //
+    // If a voter seen a bigger accepted term than its own.
+    // that means its logs are not committed.
+
+    Ballot Bal = 1;
+
+    repeated Record Logs = 30;
+}
+
+service TRaft {
+    rpc Vote (VoteReq) returns (VoteReply) {}
+    rpc Replicate (Record) returns (ReplicateReply) {}
+}
