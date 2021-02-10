@@ -349,120 +349,61 @@ func TestTailBitmap_Union(t *testing.T) {
 
 	ta := require.New(t)
 
+	ff := uint64(0xffffffffffffffff)
+
 	cases := []struct {
 		input *TailBitmap
 		other *TailBitmap
 		want  *TailBitmap
 	}{
+		// 1111 xxxx
+		// 1111 yyyy
 		{
-			input: &TailBitmap{
-				Offset:   64,
-				Words:    []uint64{1},
-				Reclamed: 0,
-			},
-			other: &TailBitmap{
-				Offset:   64,
-				Words:    []uint64{2},
-				Reclamed: 0,
-			},
-			want: &TailBitmap{
-				Offset:   64,
-				Words:    []uint64{3},
-				Reclamed: 0,
-			},
+			input: &TailBitmap{Offset: 64, Words: []uint64{1}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64, Words: []uint64{2}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64, Words: []uint64{3}, Reclamed: 0},
 		},
+		// 1111 1111 xxxx
+		// 1111 yyyy
 		{
-			// other is covered by input.Offset
-			input: &TailBitmap{
-				Offset:   64 * 2,
-				Words:    []uint64{1},
-				Reclamed: 0,
-			},
-			other: &TailBitmap{
-				Offset:   64,
-				Words:    []uint64{2},
-				Reclamed: 0,
-			},
-			want: &TailBitmap{
-				Offset:   64 * 2,
-				Words:    []uint64{1},
-				Reclamed: 0,
-			},
+			input: &TailBitmap{Offset: 64 * 2, Words: []uint64{1}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64 * 1, Words: []uint64{2}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64 * 2, Words: []uint64{1}, Reclamed: 0},
 		},
+		// 1111 1111 xxxx
+		// 1111 1111 1111 yyyy
 		{
-			// input is covered by other.Offset
-			input: &TailBitmap{
-				Offset:   64 * 2,
-				Words:    []uint64{1},
-				Reclamed: 0,
-			},
-			other: &TailBitmap{
-				Offset:   64 * 3,
-				Words:    []uint64{2},
-				Reclamed: 0,
-			},
-			want: &TailBitmap{
-				Offset:   64 * 3,
-				Words:    []uint64{2},
-				Reclamed: 64 * 3,
-			},
+			input: &TailBitmap{Offset: 64 * 2, Words: []uint64{1}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64 * 3, Words: []uint64{2}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64 * 3, Words: []uint64{2}, Reclamed: 64 * 3},
 		},
+		// 1111 1111 xxxx xxxx xxxx
+		// 1111 1111 1111 yyyy
 		{
-			// 1111 xxxx xxxx xxxx
-			// 1111 1111 yyyy
-			input: &TailBitmap{
-				Offset:   64,
-				Words:    []uint64{1, 3, 7},
-				Reclamed: 0,
-			},
-			other: &TailBitmap{
-				Offset:   64 * 2,
-				Words:    []uint64{8},
-				Reclamed: 0,
-			},
-			want: &TailBitmap{
-				Offset:   64 * 2,
-				Words:    []uint64{11, 7},
-				Reclamed: 0,
-			},
+			input: &TailBitmap{Offset: 64 * 2, Words: []uint64{1, 1, 7}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64 * 3, Words: []uint64{2}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64 * 3, Words: []uint64{3, 7}, Reclamed: 0},
 		},
+		// 1111 1111 xxxx
+		// 1111 yyyy yyyy yyyy
 		{
-			// 1111 1111 xxxx xxxx xxxx
-			// 1111 yyyy yyyy yyyy
-			input: &TailBitmap{
-				Offset:   64 * 2,
-				Words:    []uint64{1, 3, 7},
-				Reclamed: 0,
-			},
-			other: &TailBitmap{
-				Offset:   64 * 1,
-				Words:    []uint64{8, 2, 4},
-				Reclamed: 0,
-			},
-			want: &TailBitmap{
-				Offset:   64 * 2,
-				Words:    []uint64{3, 7, 7},
-				Reclamed: 0,
-			},
+			input: &TailBitmap{Offset: 64 * 2, Words: []uint64{1}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64 * 1, Words: []uint64{8, 2, 4}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64 * 2, Words: []uint64{3, 4}, Reclamed: 0},
+		},
+		// 1111 1111 xxxx xxxx xxxx
+		// 1111 yyyy yyyy yyyy
+		{
+			input: &TailBitmap{Offset: 64 * 2, Words: []uint64{1, 3, 7}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64 * 1, Words: []uint64{8, 2, 4}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64 * 2, Words: []uint64{3, 7, 7}, Reclamed: 0},
 		},
 
+		// trigger reclaim if new all-ones are found.
 		{
-			// trigger reclaim if new all-ones are found.
-			input: &TailBitmap{
-				Offset:   64 * 1023,
-				Words:    []uint64{1, 3, 7},
-				Reclamed: 0,
-			},
-			other: &TailBitmap{
-				Offset:   64 * 1023,
-				Words:    []uint64{0xffffffffffffffff - 1},
-				Reclamed: 0,
-			},
-			want: &TailBitmap{
-				Offset:   64 * 1024,
-				Words:    []uint64{3, 7},
-				Reclamed: 64 * 1024,
-			},
+			input: &TailBitmap{Offset: 64 * 1023, Words: []uint64{1, 3, 7}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64 * 1023, Words: []uint64{ff - 1}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64 * 1024, Words: []uint64{3, 7}, Reclamed: 64 * 1024},
 		},
 	}
 
@@ -470,5 +411,71 @@ func TestTailBitmap_Union(t *testing.T) {
 		c.input.Union(c.other)
 		ta.Equal(c.want, c.input, "%d-th: Get case: %+v", i+1, c)
 
+	}
+}
+
+func TestTailBitmap_Diff(t *testing.T) {
+
+	ta := require.New(t)
+
+	ff := uint64(0xffffffffffffffff)
+
+	cases := []struct {
+		input *TailBitmap
+		other *TailBitmap
+		want  *TailBitmap
+	}{
+		// 1111 xxxx
+		// 1111 1111 1111 yyyy
+		{
+			input: &TailBitmap{Offset: 64 * 1, Words: []uint64{1}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64 * 3, Words: []uint64{2}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64 * 1, Words: []uint64{ff - 1}, Reclamed: 0},
+		},
+
+		// 1111 1111 1111 xxxx xxxx
+		// 1111 yyyy
+		{
+			input: &TailBitmap{Offset: 64 * 3, Words: []uint64{1, 3}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64 * 1, Words: []uint64{2}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64 * 1, Words: []uint64{ff - 2, ff, 1, 3}, Reclamed: 64 * 1},
+		},
+
+		// 1111 1111 xxxx xxxx
+		// 1111 1111 1111 yyyy yyyy
+		{
+			input: &TailBitmap{Offset: 64 * 2, Words: []uint64{1, 3}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64 * 3, Words: []uint64{2, 4}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64 * 2, Words: []uint64{0, 1}, Reclamed: 0},
+		},
+
+		// 1111 1111 xxxx xxxx xxxx xxxx
+		// 1111 1111 1111 yyyy yyyy
+		{
+			input: &TailBitmap{Offset: 64 * 2, Words: []uint64{1, 3, 7, 7}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64 * 3, Words: []uint64{2, 4}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64 * 2, Words: []uint64{0, 1, 3, 7}, Reclamed: 0},
+		},
+
+		// 1111 1111 xxxx xxxx
+		// 1111 yyyy yyyy
+		{
+			input: &TailBitmap{Offset: 64 * 2, Words: []uint64{1, 3}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64 * 1, Words: []uint64{2, 4}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64 * 1, Words: []uint64{ff - 2, 1, 3}, Reclamed: 64 * 1},
+		},
+
+		// 1111 1111 xxxx xxxx
+		// 1111 yyyy yyyy yyyy yyyy
+		{
+			input: &TailBitmap{Offset: 64 * 2, Words: []uint64{1, 3}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64 * 1, Words: []uint64{2, 2, 3, 4}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64 * 1, Words: []uint64{ff - 2, 1, 0}, Reclamed: 64 * 1},
+		},
+	}
+
+	for i, c := range cases {
+		c.input.Diff(c.other)
+		ta.Equal(c.want, c.input, "%d-th: Get case: %+v", i+1, c)
 	}
 }

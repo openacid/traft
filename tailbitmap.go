@@ -139,3 +139,71 @@ func (tb *TailBitmap) Union(tc *TailBitmap) {
 
 	tb.Compact()
 }
+
+// Diff AKA substraction A - B or  A \ B
+func (tb *TailBitmap) Diff(tc *TailBitmap) {
+
+	lb := tb.Offset + int64(len(tb.Words)*64)
+	lc := tc.Offset + int64(len(tc.Words)*64)
+
+	if lb <= tc.Offset {
+		for i := 0; i < len(tb.Words); i++ {
+			tb.Words[i] = ^tb.Words[i]
+		}
+		return
+	}
+
+	if tb.Offset > lc {
+		// 1111 1111 1111 xxxx xxxx
+		// 1111 yyyy
+		l := int((tb.Offset - tc.Offset) >> 6)
+		words := make([]uint64, l+len(tb.Words))
+		var i int
+		for i = 0; i < l && i < len(tc.Words); i++ {
+			words[i] = ^tc.Words[i]
+		}
+		for ; i < l; i++ {
+			words[i] = 0xffffffffffffffff
+		}
+
+		copy(words[i:], tb.Words)
+		tb.Words = words
+		tb.Offset = tc.Offset
+		tb.Reclamed = tb.Offset
+		return
+	}
+
+	if tb.Offset <= tc.Offset {
+		// 1111 1111 xxxx xxxx
+		// 1111 1111 1111 yyyy yyyy
+		delta := (tc.Offset - tb.Offset) >> 6
+		var i int64
+		for i = 0; i < delta; i++ {
+			tb.Words[i] = 0
+		}
+		for ; i < int64(len(tb.Words)) && i < (lc-tb.Offset)>>6; i++ {
+			tb.Words[i] &= ^tc.Words[i-delta]
+		}
+
+	} else {
+		// tb.Offset > tc.Offset
+		// 1111 1111 xxxx xxxx
+		// 1111 yyyy yyyy
+
+		delta := int((tb.Offset - tc.Offset) >> 6)
+		words := make([]uint64, delta+len(tb.Words))
+
+		var i int
+		for i = 0; i < delta; i++ {
+			words[i] = ^tc.Words[i]
+		}
+		for ; i < len(words) && i < len(tc.Words); i++ {
+			words[i] = tb.Words[i-delta] &^ tc.Words[i]
+		}
+		copy(words[i:], tb.Words[i-delta:])
+
+		tb.Words = words
+		tb.Offset = tc.Offset
+		tb.Reclamed = tb.Offset
+	}
+}
