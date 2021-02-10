@@ -21,9 +21,23 @@ message Cmd {
 // Thus it is compressed with an Offset of all-ones position and a trailing
 // bitmap.
 // It is used to describe Record dependency etc.
+// 
+// The data structure is as the following described:
+//
+//                      reclaimed
+//                      |
+//                      |     Offset
+//                      |     |
+//                      v     v
+//                ..... X ... 01010...00111  00...
+//   bitIndex:    0123...     ^              ^
+//                            |              |
+//                            Words[0]       Words[1]
+//
 message TailBitmap {
     int64 Offset = 1;
     repeated uint64 Words = 2;
+    int64 Reclamed = 3;
 }
 
 // Record is a log record

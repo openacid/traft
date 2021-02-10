@@ -2,7 +2,7 @@ package traft
 
 import "math/bits"
 
-func NewNode(ids []int64, addrs []string) {
+func NewNode(ids []int64, addrs []string) *Node {
 	members := make([]*ReplicaInfo, 0)
 	for i, id := range ids {
 		members = append(members, &ReplicaInfo{
@@ -13,8 +13,26 @@ func NewNode(ids []int64, addrs []string) {
 
 	conf := &ClusterConfig{
 		Members: members,
+		Quorums: buildMajorityQuorums(1 << uint(len(members)-1)),
 	}
-	_ = conf
+
+	progs := make([]*ReplicaProgress, 0)
+	for _, m := range members {
+		_ = m
+		progs = append(progs, &ReplicaProgress{
+			Has: &TailBitmap{},
+		})
+	}
+
+	node := &Node{
+		Config:       conf,
+		Log:          make([]*Record, 0),
+		Term:         0,
+		AcceptedTerm: 0,
+		Progresses:   progs,
+	}
+
+	return node
 }
 
 func buildMajorityQuorums(mask uint64) []uint64 {
