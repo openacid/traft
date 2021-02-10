@@ -313,7 +313,7 @@ func TestTailBitmap_Get(t *testing.T) {
 	}
 }
 
-func TestTailBitmap_Union(t *testing.T) {
+func TestTailBitmap_Clone(t *testing.T) {
 
 	ta := require.New(t)
 
@@ -321,6 +321,33 @@ func TestTailBitmap_Union(t *testing.T) {
 	for i, _ := range allOnes1024 {
 		allOnes1024[i] = 0xffffffffffffffff
 	}
+
+	cases := []struct {
+		input *TailBitmap
+	}{
+		{
+			input: &TailBitmap{
+				Offset:   64,
+				Words:    []uint64{1, 2, 3},
+				Reclamed: 0,
+			},
+		},
+	}
+
+	for i, c := range cases {
+		got := c.input.Clone()
+		ta.Equal(c.input, got, "%d-th: same as cloned case: %+v", i+1, c)
+
+		prev := c.input.Words[0]
+		ta.NotEqual(1000, prev, "%d-th: not 1000 case: %+v", i+1, c)
+		c.input.Words[0] = 1000
+		ta.Equal(prev, got.Words[0], "%d-th: cloned does not change the original case: %+v", i+1, c)
+	}
+}
+
+func TestTailBitmap_Union(t *testing.T) {
+
+	ta := require.New(t)
 
 	cases := []struct {
 		input *TailBitmap

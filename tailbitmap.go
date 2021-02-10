@@ -85,6 +85,16 @@ func (tb *TailBitmap) Get1(idx int64) uint64 {
 	return (tb.Words[idx>>6] >> uint(idx&63)) & 1
 }
 
+func (tb *TailBitmap) Clone() *TailBitmap {
+	rst := &TailBitmap{
+		Offset:   tb.Offset,
+		Words:    make([]uint64, len(tb.Words)),
+		Reclamed: tb.Reclamed,
+	}
+	copy(rst.Words, tb.Words)
+	return rst
+}
+
 func (tb *TailBitmap) Union(tc *TailBitmap) {
 
 	lb := tb.Offset + int64(len(tb.Words)*64)
