@@ -19,6 +19,10 @@ func TestLeaderId_Cmp(t *testing.T) {
 		{a: NewLeaderId(1, 0), b: NewLeaderId(1, 1), want: -1},
 		{a: NewLeaderId(2, 0), b: NewLeaderId(1, 1), want: 1},
 		{a: NewLeaderId(0, 0), b: NewLeaderId(1, 1), want: -1},
+
+		{a: NewLeaderId(0, 0), b: nil, want: 1},
+		{a: nil, b: NewLeaderId(1, 1), want: -1},
+		{a: nil, b: nil, want: 0},
 	}
 
 	for i, c := range cases {
