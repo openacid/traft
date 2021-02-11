@@ -30,3 +30,15 @@ func TestLeaderId_Cmp(t *testing.T) {
 		ta.Equal(c.want, got, "%d-th: case: %+v", i+1, c)
 	}
 }
+
+func TestLeaderId_Clone(t *testing.T) {
+
+	ta := require.New(t)
+
+	a := NewLeaderId(1, 2)
+	b := a.Clone()
+	a.Term = 3
+	a.Id = 4
+	ta.Equal(int64(1), b.Term)
+	ta.Equal(int64(2), b.Id)
+}

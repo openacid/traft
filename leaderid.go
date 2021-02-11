@@ -1,5 +1,7 @@
 package traft
 
+import proto "github.com/gogo/protobuf/proto"
+
 func NewLeaderId(term, id int64) *LeaderId {
 	return &LeaderId{
 		Term: term,
@@ -26,4 +28,8 @@ func (a *LeaderId) Cmp(b *LeaderId) int {
 	}
 
 	return cmpI64(a.Id, b.Id)
+}
+
+func (l *LeaderId) Clone() *LeaderId {
+	return proto.Clone(l).(*LeaderId)
 }
