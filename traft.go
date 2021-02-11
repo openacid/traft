@@ -1,5 +1,7 @@
 package traft
 
+import "sort"
+
 func NewNode(id int64, idAddrs map[int64]string) *Node {
 	_, ok := idAddrs[id]
 	if !ok {
@@ -14,9 +16,13 @@ func NewNode(id int64, idAddrs map[int64]string) *Node {
 		})
 	}
 
+	sort.Slice(members, func(i, j int) bool {
+		return members[i].Id < members[j].Id
+	})
+
 	conf := &ClusterConfig{
 		Members: members,
-		Quorums: buildMajorityQuorums(1 << uint(len(members)-1)),
+		Quorums: buildMajorityQuorums(1<<uint(len(members)) - 1),
 	}
 
 	progs := make(map[int64]*ReplicaStatus, 0)

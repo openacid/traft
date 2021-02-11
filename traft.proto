@@ -2,6 +2,13 @@ syntax = "proto3";
 
 option go_package = ".;traft";
 
+// import "gogoproto/gogo.proto";
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+// option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.equal_all) = true;
+
 //
 // Unexchangeble logs: r1 and r3. They both modify the same key `x`.
 // r1 and r2, r2 and r3 are exchangeable.

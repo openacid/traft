@@ -6,10 +6,12 @@ import (
 	context "context"
 	sync "sync"
 
-	"google.golang.org/protobuf/proto"
+	proto "github.com/gogo/protobuf/proto"
+	// "google.golang.org/protobuf/proto"
 )
 
 type TRaft struct {
+	// TODO lock first
 	mu sync.Mutex
 	Node
 }
@@ -18,6 +20,9 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 
 	candidate := req.Status
 	me := tr.Status[tr.Id]
+
+	// _, _ = req.Marshal()
+	// _, _ = pp.Marshal(req)
 
 	// A vote reply just send back a voter's status.
 	// It is the candidate's responsibility to check if a voter granted it.
@@ -65,4 +70,8 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 	repl.Logs = logs
 
 	return repl, nil
+}
+
+func (tr *TRaft) Replicate(ctx context.Context, req *Record) (*ReplicateReply, error) {
+	return nil, nil
 }
