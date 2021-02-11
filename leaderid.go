@@ -1,5 +1,12 @@
 package traft
 
+func NewLeaderId(term, id int64) *LeaderId {
+	return &LeaderId{
+		Term: term,
+		Id:   id,
+	}
+}
+
 // Compare two leader id and returns 1, 0 or -1 for greater, equal and less
 func (a *LeaderId) Cmp(b *LeaderId) int {
 	r := cmpI64(a.Term, b.Term)
