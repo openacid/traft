@@ -103,23 +103,18 @@ message LeaderId {
 // log seq number.
 // Then a leader is chosen from these candidates by their Current leader id.
 // The max LeaderId wins.
-message Ballot {
-    LeaderId AcceptedFrom = 1;
-    TailBitmap Accepted = 2;
 
-    // TODO Progress needs a Ballot
-    LeaderId Current = 3;
-}
+//message Ballot {
+//    LeaderId AcceptedFrom = 1;
+//    TailBitmap Accepted = 2;
+//
+//    LeaderId Current = 3;
+//}
 
 
 message Node {
     ClusterConfig Config = 1;
     repeated Record Log = 2;
-
-    // last seen term
-    int64 Term = 3;
-
-    int64 Id = 10;
 
     // which replica it has voted for as a leader.
     //
@@ -130,11 +125,17 @@ message Node {
     // Accepted is nil.
     LeaderId VotedFor = 5;
 
-    // local view of other replicas
-    map<int64, ReplicaProgress> Progresses = 6;
+    // local view of every replica, including this node too.
+    map<int64, ReplicaStatus> Status = 6;
 }
 
-message ReplicaProgress {
+message ReplicaStatus {
+
+    // last seen term
+    // int64 Term = 3;
+    // int64 Id = 10;
+    LeaderId Current = 10;
+
     // similar to the vrnd/vballot concept in paxos.
     // the Ballot number a value is accepted at.
     //
@@ -157,9 +158,7 @@ message ClusterConfig {
 }
 
 message VoteReq {
-    Ballot Bal = 1;
-    // Has: what logs the sender has.
-    TailBitmap Accepted = 2;
+    ReplicaStatus Status = 1;
 }
 
 message VoteReply {
@@ -174,8 +173,10 @@ message VoteReply {
     // If a voter seen a bigger accepted term than its own.
     // that means its logs are not committed.
 
-    Ballot Bal = 1;
+    ReplicaStatus VoterStatus = 1;
 
+    // The logs that voter has but leader candidate does not have.
+    // For the leader to rebuild all possibly committed logs from a quorum.
     repeated Record Logs = 30;
 }
 

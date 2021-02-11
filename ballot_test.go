@@ -1,41 +1,35 @@
 package traft
 
-import (
-	"testing"
+// func TestNewBallot(t *testing.T) {
 
-	"github.com/stretchr/testify/require"
-)
+//     ta := require.New(t)
 
-func TestNewBallot(t *testing.T) {
+//     got := NewBallot(1, 2, 3, 4, 5)
+//     ta.Equal(int64(1), got.Current.Term)
+//     ta.Equal(int64(2), got.Current.Id)
 
-	ta := require.New(t)
+//     ta.Equal(int64(5), got.MaxLogSeq)
 
-	got := NewBallot(1, 2, 3, 4, 5)
-	ta.Equal(int64(1), got.Current.Term)
-	ta.Equal(int64(2), got.Current.Id)
+//     ta.Equal(int64(3), got.AcceptedFrom.Term)
+//     ta.Equal(int64(4), got.AcceptedFrom.Id)
+// }
 
-	ta.Equal(int64(5), got.MaxLogSeq)
+// func TestBallog_CmpLog(t *testing.T) {
 
-	ta.Equal(int64(3), got.AcceptedFrom.Term)
-	ta.Equal(int64(4), got.AcceptedFrom.Id)
-}
+//     ta := require.New(t)
 
-func TestBallog_CmpLog(t *testing.T) {
+//     cases := []struct {
+//         a, b *Ballot
+//         want int
+//     }{
+//         {a: NewBallot(0, 0, 1, 1, 1), b: NewBallot(0, 0, 1, 1, 1), want: 0},
+//         {a: NewBallot(0, 0, 1, 1, 2), b: NewBallot(0, 0, 1, 1, 1), want: 1},
+//         {a: NewBallot(0, 0, 1, 2, 0), b: NewBallot(0, 0, 1, 1, 1), want: 1},
+//         {a: NewBallot(0, 0, 2, 0, 0), b: NewBallot(0, 0, 1, 1, 1), want: 1},
+//     }
 
-	ta := require.New(t)
-
-	cases := []struct {
-		a, b *Ballot
-		want int
-	}{
-		{a: NewBallot(0, 0, 1, 1, 1), b: NewBallot(0, 0, 1, 1, 1), want: 0},
-		{a: NewBallot(0, 0, 1, 1, 2), b: NewBallot(0, 0, 1, 1, 1), want: 1},
-		{a: NewBallot(0, 0, 1, 2, 0), b: NewBallot(0, 0, 1, 1, 1), want: 1},
-		{a: NewBallot(0, 0, 2, 0, 0), b: NewBallot(0, 0, 1, 1, 1), want: 1},
-	}
-
-	for i, c := range cases {
-		ta.Equal(c.want, c.a.CmpLog(c.b), "%d-th: case: %+v", i+1, c)
-		ta.Equal(-c.want, c.b.CmpLog(c.a), "%d-th: case: %+v", i+1, c)
-	}
-}
+//     for i, c := range cases {
+//         ta.Equal(c.want, c.a.CmpLog(c.b), "%d-th: case: %+v", i+1, c)
+//         ta.Equal(-c.want, c.b.CmpLog(c.a), "%d-th: case: %+v", i+1, c)
+//     }
+// }

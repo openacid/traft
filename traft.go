@@ -19,25 +19,24 @@ func NewNode(id int64, idAddrs map[int64]string) *Node {
 		Quorums: buildMajorityQuorums(1 << uint(len(members)-1)),
 	}
 
-	progs := make(map[int64]*ReplicaProgress, 0)
+	progs := make(map[int64]*ReplicaStatus, 0)
 	for _, m := range members {
-		progs[m.Id] = emptyProgress()
+		progs[m.Id] = emptyProgress(m.Id)
 	}
 
 	node := &Node{
-		Config:     conf,
-		Log:        make([]*Record, 0),
-		Term:       0,
-		Id:         id,
-		VotedFor:   nil,
-		Progresses: progs,
+		Config:   conf,
+		Log:      make([]*Record, 0),
+		VotedFor: nil,
+		Status:   progs,
 	}
 
 	return node
 }
 
-func emptyProgress() *ReplicaProgress {
-	return &ReplicaProgress{
+func emptyProgress(id int64) *ReplicaStatus {
+	return &ReplicaStatus{
+		Current:      NewLeaderId(0, id),
 		AcceptedFrom: nil,
 		Accepted:     NewTailBitmap(0),
 		Committed:    NewTailBitmap(0),
