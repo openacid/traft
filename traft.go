@@ -25,10 +25,10 @@ func NewNode(id int64, idAddrs map[int64]string) *Node {
 	}
 
 	node := &Node{
-		Config:   conf,
-		Log:      make([]*Record, 0),
-		VotedFor: nil,
-		Status:   progs,
+		Config: conf,
+		Log:    make([]*Record, 0),
+		Id:     id,
+		Status: progs,
 	}
 
 	return node
@@ -36,7 +36,8 @@ func NewNode(id int64, idAddrs map[int64]string) *Node {
 
 func emptyProgress(id int64) *ReplicaStatus {
 	return &ReplicaStatus{
-		Current:      NewLeaderId(0, id),
+		// initially it votes for itself with term 0
+		VotedFor:     NewLeaderId(0, id),
 		AcceptedFrom: nil,
 		Accepted:     NewTailBitmap(0),
 		Committed:    NewTailBitmap(0),

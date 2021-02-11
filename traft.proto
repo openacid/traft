@@ -114,16 +114,15 @@ message LeaderId {
 
 message Node {
     ClusterConfig Config = 1;
+
+    // From which log seq number we keeps here.
+    int64 LogOffset = 4;
+
+    // TODO what log to keep in mem?
     repeated Record Log = 2;
 
-    // which replica it has voted for as a leader.
-    //
-    // Accepted is the same as VotedFor after receiving one log-replication
-    // message from the leader.
-    //
-    // Before receiving a message, VotedFor is the leader this replica knows of,
-    // Accepted is nil.
-    LeaderId VotedFor = 5;
+    // replica id of this replica.
+    int64 Id = 3;
 
     // local view of every replica, including this node too.
     map<int64, ReplicaStatus> Status = 6;
@@ -131,10 +130,21 @@ message Node {
 
 message ReplicaStatus {
 
-    // last seen term
+    // last seen term+id
     // int64 Term = 3;
     // int64 Id = 10;
-    LeaderId Current = 10;
+    // the last leader it voted for. or it is local term + local id.
+    // E.g., voted for itself.
+    //
+    // TODO cleanup comment:
+    // which replica it has voted for as a leader.
+    //
+    // Accepted is the same as VotedFor after receiving one log-replication
+    // message from the leader.
+    //
+    // Before receiving a message, VotedFor is the leader this replica knows of,
+    // Accepted is nil.
+    LeaderId VotedFor = 10;
 
     // similar to the vrnd/vballot concept in paxos.
     // the Ballot number a value is accepted at.
