@@ -77,8 +77,10 @@ message Record {
     TailBitmap Overrides = 40;
 }
 
+
 message ReplicateReply {
 }
+
 
 message LeaderId {
     int64 Term = 1;
