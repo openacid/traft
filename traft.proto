@@ -67,6 +67,16 @@ message TailBitmap {
 
 // Record is a log record
 message Record {
+    // Which leader proposed this log.
+    //
+    // TODO It seems this field is useless. Because we already have `Accepted`.
+    // This is different from the original raft:
+    // raft does not have a explicit concept `accepted`, which is enssential in
+    // paxos.
+    // Instead, The `commited` in raft is defined as: leader forwards its
+    // own term log to a quorum.
+    LeaderId By = 1;
+
     // Log sequence number.
     int64 Seq = 10;
 
@@ -88,9 +98,16 @@ message LeaderId {
 }
 
 
+// The replica that has the latest log is allow to be a new leader.
+// I.e., log is forwarded from latest leader(max Accepted), and has the highest
+// log seq number.
+// Then a leader is chosen from these candidates by their Current leader id.
+// The max LeaderId wins.
 message Ballot {
-    LeaderId Current = 1;
-    LeaderId Accepted = 2;
+    LeaderId Accepted = 1;
+    int64 MaxLogSeq = 2;
+
+    LeaderId Current = 3;
 }
 
 
@@ -103,16 +120,26 @@ message Node {
 
     int64 Id = 10;
 
-    LeaderId Accepted = 4;
-
     // which replica it has voted for as a leader.
+    //
+    // Accepted is the same as VotedFor after receiving one log-replication
+    // message from the leader.
+    //
+    // Before receiving a message, VotedFor is the leader this replica knows of,
+    // Accepted is nil.
     LeaderId VotedFor = 5;
+
+    // local view of other replicas
     map<int64, ReplicaProgress> Progresses = 6;
 }
 
 message ReplicaProgress {
+    // similar to the vrnd/vballot concept in paxos.
+    // the Ballot number a value is accepted at.
+    //
     LeaderId AcceptedFrom = 4;
 
+    // What logs has been accepted by this replica.
     TailBitmap Accepted = 1;
     TailBitmap Committed = 2;
     TailBitmap Applied = 3;
