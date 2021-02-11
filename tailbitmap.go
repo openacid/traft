@@ -3,6 +3,7 @@ package traft
 import (
 	"math/bits"
 
+	proto "github.com/gogo/protobuf/proto"
 	"github.com/openacid/low/bitmap"
 )
 
@@ -96,13 +97,7 @@ func (tb *TailBitmap) Get1(idx int64) uint64 {
 }
 
 func (tb *TailBitmap) Clone() *TailBitmap {
-	rst := &TailBitmap{
-		Offset:   tb.Offset,
-		Words:    make([]uint64, len(tb.Words)),
-		Reclamed: tb.Reclamed,
-	}
-	copy(rst.Words, tb.Words)
-	return rst
+	return proto.Clone(tb).(*TailBitmap)
 }
 
 func (tb *TailBitmap) Union(tc *TailBitmap) {
