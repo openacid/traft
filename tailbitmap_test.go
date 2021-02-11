@@ -12,6 +12,7 @@ func TestNewTailBitmap(t *testing.T) {
 
 	cases := []struct {
 		input int64
+		set   []int64
 		want  *TailBitmap
 	}{
 		{
@@ -30,10 +31,20 @@ func TestNewTailBitmap(t *testing.T) {
 				Reclamed: 999999,
 			},
 		},
+		// with extra bits to set
+		{
+			input: 64 * 1,
+			set:   []int64{1, 64, 65},
+			want: &TailBitmap{
+				Offset:   64 * 1,
+				Words:    []uint64{3},
+				Reclamed: 64 * 1,
+			},
+		},
 	}
 
 	for i, c := range cases {
-		got := NewTailBitmap(c.input)
+		got := NewTailBitmap(c.input, c.set...)
 		ta.Equal(c.want, got, "%d-th: case: %+v", i+1, c)
 	}
 }

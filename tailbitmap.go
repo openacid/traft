@@ -12,12 +12,18 @@ var reclaimThreshold = int64(1024) * 64
 // NewTailBitmap creates an TailBitmap with a preset Offset and an empty
 // tail bitmap.
 //
+// Optional arg `set` specifies what bit to set to 1.
+// The bit positions in `set` is absolute, NOT based on offset.
+//
 // Since 0.1.22
-func NewTailBitmap(offset int64) *TailBitmap {
+func NewTailBitmap(offset int64, set ...int64) *TailBitmap {
 	tb := &TailBitmap{
 		Offset:   offset,
 		Reclamed: offset,
 		Words:    make([]uint64, 0, reclaimThreshold>>6),
+	}
+	for _, pos := range set {
+		tb.Set(pos)
 	}
 	return tb
 }
