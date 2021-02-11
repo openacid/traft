@@ -43,5 +43,4 @@ func emptyProgress() *ReplicaProgress {
 		Committed:    NewTailBitmap(0),
 		Applied:      NewTailBitmap(0),
 	}
-
 }

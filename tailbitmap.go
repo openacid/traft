@@ -1,6 +1,10 @@
 package traft
 
-import "github.com/openacid/low/bitmap"
+import (
+	"math/bits"
+
+	"github.com/openacid/low/bitmap"
+)
 
 // reclaimThreshold is the size threshold in bit for reclamation of `Words`.
 var reclaimThreshold = int64(1024) * 64
@@ -206,4 +210,19 @@ func (tb *TailBitmap) Diff(tc *TailBitmap) {
 		tb.Offset = tc.Offset
 		tb.Reclamed = tb.Offset
 	}
+}
+
+// Last returns last set bit index + 1.
+func (tb *TailBitmap) Len() int64 {
+
+	r := len(tb.Words) - 1
+	for ; r >= 0 && tb.Words[r] == 0; r-- {
+	}
+
+	if r < 0 {
+		// all Words are 0
+		return tb.Offset
+	}
+
+	return tb.Offset + int64(r+1)<<6 - int64(bits.LeadingZeros64(tb.Words[r]))
 }

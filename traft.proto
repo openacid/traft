@@ -105,8 +105,9 @@ message LeaderId {
 // The max LeaderId wins.
 message Ballot {
     LeaderId AcceptedFrom = 1;
-    int64 MaxLogSeq = 2;
+    TailBitmap Accepted = 2;
 
+    // TODO Progress needs a Ballot
     LeaderId Current = 3;
 }
 
@@ -158,7 +159,7 @@ message ClusterConfig {
 message VoteReq {
     Ballot Bal = 1;
     // Has: what logs the sender has.
-    TailBitmap Has = 2;
+    TailBitmap Accepted = 2;
 }
 
 message VoteReply {

@@ -479,3 +479,24 @@ func TestTailBitmap_Diff(t *testing.T) {
 		ta.Equal(c.want, c.input, "%d-th: Get case: %+v", i+1, c)
 	}
 }
+
+func TestTailBitmap_Len(t *testing.T) {
+
+	ta := require.New(t)
+
+	cases := []struct {
+		input *TailBitmap
+		want  int64
+	}{
+		{input: &TailBitmap{Offset: 64 * 1, Words: []uint64{}}, want: 64 * 1},
+		{input: &TailBitmap{Offset: 64 * 1, Words: []uint64{1}}, want: 64*1 + 1},
+		{input: &TailBitmap{Offset: 64 * 2, Words: []uint64{2}}, want: 64*2 + 2},
+		{input: &TailBitmap{Offset: 64 * 2, Words: []uint64{1, 2}}, want: 64*3 + 2},
+		{input: &TailBitmap{Offset: 64 * 2, Words: []uint64{1, 2, 0}}, want: 64*3 + 2},
+	}
+
+	for i, c := range cases {
+		got := c.input.Len()
+		ta.Equal(c.want, got, "%d-th: Get case: %+v", i+1, c)
+	}
+}
