@@ -18,16 +18,16 @@ func NewNode(ids []int64, addrs []string) *Node {
 	for _, m := range members {
 		_ = m
 		progs = append(progs, &ReplicaProgress{
-			Has: &TailBitmap{},
+			// Has: &TailBitmap{},
 		})
 	}
 
 	node := &Node{
-		Config:       conf,
-		Log:          make([]*Record, 0),
-		Term:         0,
-		AcceptedTerm: 0,
-		Progresses:   progs,
+		Config: conf,
+		Log:    make([]*Record, 0),
+		Term:   0,
+		// AcceptedTerm: 0,
+		// Progresses: progs,
 	}
 
 	return node

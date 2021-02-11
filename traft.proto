@@ -2,8 +2,33 @@ syntax = "proto3";
 
 option go_package = ".;traft";
 
+//
+// Unexchangeble logs: r1 and r3. They both modify the same key `x`.
+// r1 and r2, r2 and r3 are exchangeable.
+//
+//  r3: set x = 2  <-.
+//  r2: set y = 1    |
+//  r1: set x = 1  <-'
 
-// Cmd is a log record
+// Issue about the original raft
+//
+// 1. Only one leader can be established in a `term`.
+// Such a design introduces more conflict if multiple replicas try to become a
+// leader in a short time.
+//
+// Solution
+//
+// blabla TODO 
+
+
+// TODO: remove useless field in proto struct:
+//
+//   type LeaderId struct {
+//     state         protoimpl.MessageState
+//     sizeCache     protoimpl.SizeCache
+//     unknownFields protoimpl.UnknownFields
+
+// Cmd defines the action a log record does
 message Cmd {
     string Op = 10;
     string Key = 20;
@@ -53,15 +78,17 @@ message Record {
 }
 
 message ReplicateReply {
-
 }
 
+message LeaderId {
+    int64 Term = 1;
+    int64 Id = 2;
+}
+
+
 message Ballot {
-    int64 AcceptedTerm = 1;
-    int64 Term = 2;
-    // Seq is the max log seq
-    int64 Seq = 3;
-    int64 Id = 4;
+    LeaderId Current = 1;
+    LeaderId Accepted = 2;
 }
 
 
@@ -69,14 +96,22 @@ message Node {
     ClusterConfig Config = 1;
     repeated Record Log = 2;
 
+    // last seen term
     int64 Term = 3;
-    int64 AcceptedTerm = 4;
-    repeated ReplicaProgress Progresses = 5;
 
+    int64 Id = 10;
+
+    LeaderId Accepted = 4;
+
+    // which replica it has voted for as a leader.
+    LeaderId VotedFor = 5;
+    map<int64, ReplicaProgress> Progresses = 6;
 }
 
 message ReplicaProgress {
-    TailBitmap Has = 1;
+    LeaderId AcceptedFrom = 4;
+
+    TailBitmap Accepted = 1;
     TailBitmap Committed = 2;
     TailBitmap Applied = 3;
 }
@@ -93,6 +128,7 @@ message ClusterConfig {
 
 message VoteReq {
     Ballot Bal = 1;
+    // Has: what logs the sender has.
     TailBitmap Has = 2;
 }
 
