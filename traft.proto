@@ -120,16 +120,14 @@ message LeaderId {
 
 
 message Node {
+    // replica id of this replica.
+    int64 Id = 3;
+
     ClusterConfig Config = 1;
 
     // From which log seq number we keeps here.
     int64 LogOffset = 4;
-
-    // TODO what log to keep in mem?
     repeated Record Log = 2;
-
-    // replica id of this replica.
-    int64 Id = 3;
 
     // local view of every replica, including this node too.
     map<int64, ReplicaStatus> Status = 6;

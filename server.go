@@ -21,9 +21,6 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 	candidate := req.Status
 	me := tr.Status[tr.Id]
 
-	// _, _ = req.Marshal()
-	// _, _ = pp.Marshal(req)
-
 	// A vote reply just send back a voter's status.
 	// It is the candidate's responsibility to check if a voter granted it.
 	repl := &VoteReply{
