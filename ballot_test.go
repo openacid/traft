@@ -16,8 +16,8 @@ func TestNewBallot(t *testing.T) {
 
 	ta.Equal(int64(5), got.MaxLogSeq)
 
-	ta.Equal(int64(3), got.Accepted.Term)
-	ta.Equal(int64(4), got.Accepted.Id)
+	ta.Equal(int64(3), got.AcceptedFrom.Term)
+	ta.Equal(int64(4), got.AcceptedFrom.Id)
 }
 
 func TestBallog_CmpLog(t *testing.T) {

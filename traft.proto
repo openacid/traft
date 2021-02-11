@@ -99,12 +99,12 @@ message LeaderId {
 
 
 // The replica that has the latest log is allow to be a new leader.
-// I.e., log is forwarded from latest leader(max Accepted), and has the highest
+// I.e., log is forwarded from latest leader(max AcceptedFrom), and has the highest
 // log seq number.
 // Then a leader is chosen from these candidates by their Current leader id.
 // The max LeaderId wins.
 message Ballot {
-    LeaderId Accepted = 1;
+    LeaderId AcceptedFrom = 1;
     int64 MaxLogSeq = 2;
 
     LeaderId Current = 3;
