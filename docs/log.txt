@@ -1,0 +1,28 @@
+- day-1: buildMajorityQuorums()
+- day-1: import TailBitmap, add Union()
+- day-1: TailBitmap.Clone()
+- day-1: TailBitmap.Diff()
+- day-1: refactor buildMajorityQuorums()
+- day-2: LeaderId.Cmp()
+- day-2: add NewLeaderId
+- day-2: add NewBallot()
+- day-2: fix: LeaderId.Cmp() accept nil as operand
+- day-2: Ballot.CmpLog() to compare only the log-related fields
+- day-2: rename Ballot.Accepted to Ballot.AcceptedFrom
+- day-2: TailBitmap.Len()
+- day-2: refactor design, add ReplicaStatus, remove Ballot.
+- day-2: impl Vote Handler, under dev!!!
+- day-2: use gogoproto, build clean .pb.go with less code, add serveCluster() to setup a simple cluster for test
+- day-2: add NewCmdI64()
+- day-2: add NewRecord()
+- day-2: add ClusterConfig.GetReplicaInfo()
+- day-2: NewTailBitmap() accepts extra bits to set
+- day-2: add LeaderId:Clone()
+- day-2: refactor TailBitmap.Clone(): use proto
+- day-3: draft test of vote
+- day-3: rename By to Author, AcceptedFrom to Committer. borrowed concepts from git:DDD
+- day-3: add test: HandleVoteReq. add ShortStr() to Cmd, LeaderI, Record and []Record
+- day-3: refactor VoteReply: do not use ReplicaStatus to describe log status
+- day-3: add readme to record progress
+- day-3: readme: impl storage with slim
+- day-3: test that voter send back nil log

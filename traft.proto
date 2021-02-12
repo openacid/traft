@@ -99,10 +99,6 @@ message Record {
 }
 
 
-message ReplicateReply {
-}
-
-
 message LeaderId {
     int64 Term = 1;
     int64 Id = 2;
@@ -222,7 +218,25 @@ message VoteReply {
     repeated Record Logs = 30;
 }
 
+message ReplicateReq {
+    LeaderId Committer = 1;
+    repeated Record Logs = 2;
+}
+
+message ReplicateReply {
+    // A replica responding a VotedFor with the same value with
+    // ReplciateReq.Committer indicates the logs are accepted.
+    // Otherwise declined.
+    LeaderId VotedFor =1;
+
+    // Also a replica should respond with what logs it already has and
+    // has committed.
+
+    TailBitmap Accepted = 2;
+    TailBitmap Committed = 3;
+}
+
 service TRaft {
     rpc Vote (VoteReq) returns (VoteReply) {}
-    rpc Replicate (Record) returns (ReplicateReply) {}
+    rpc Replicate (ReplicateReq) returns (ReplicateReply) {}
 }

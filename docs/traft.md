@@ -729,6 +729,14 @@ NewRecord: without Overrides yet!!! TODO
 func (*Record) Descriptor() ([]byte, []int)
 ```
 
+#### func (*Record) Empty
+
+```go
+func (r *Record) Empty() bool
+```
+gogoproto would panic if a []*Record has a nil in it. Thus we use r.Cmd == nil
+to indicate an absent log record.
+
 #### func (*Record) Equal
 
 ```go
@@ -1124,6 +1132,12 @@ func (m *ReplicaStatus) XXX_Unmarshal(b []byte) error
 
 ```go
 type ReplicateReply struct {
+	// A replica responding a VotedFor with the same value with
+	// ReplciateReq.Committer indicates the logs are accepted.
+	// Otherwise declined.
+	VotedFor  *LeaderId   `protobuf:"bytes,1,opt,name=VotedFor,proto3" json:"VotedFor,omitempty"`
+	Accepted  *TailBitmap `protobuf:"bytes,2,opt,name=Accepted,proto3" json:"Accepted,omitempty"`
+	Committed *TailBitmap `protobuf:"bytes,3,opt,name=Committed,proto3" json:"Committed,omitempty"`
 }
 ```
 
@@ -1138,6 +1152,24 @@ func (*ReplicateReply) Descriptor() ([]byte, []int)
 
 ```go
 func (this *ReplicateReply) Equal(that interface{}) bool
+```
+
+#### func (*ReplicateReply) GetAccepted
+
+```go
+func (m *ReplicateReply) GetAccepted() *TailBitmap
+```
+
+#### func (*ReplicateReply) GetCommitted
+
+```go
+func (m *ReplicateReply) GetCommitted() *TailBitmap
+```
+
+#### func (*ReplicateReply) GetVotedFor
+
+```go
+func (m *ReplicateReply) GetVotedFor() *LeaderId
 ```
 
 #### func (*ReplicateReply) Marshal
@@ -1218,6 +1250,118 @@ func (m *ReplicateReply) XXX_Size() int
 func (m *ReplicateReply) XXX_Unmarshal(b []byte) error
 ```
 
+#### type ReplicateReq
+
+```go
+type ReplicateReq struct {
+	Committer *LeaderId `protobuf:"bytes,1,opt,name=Committer,proto3" json:"Committer,omitempty"`
+	Logs      []*Record `protobuf:"bytes,2,rep,name=Logs,proto3" json:"Logs,omitempty"`
+}
+```
+
+
+#### func (*ReplicateReq) Descriptor
+
+```go
+func (*ReplicateReq) Descriptor() ([]byte, []int)
+```
+
+#### func (*ReplicateReq) Equal
+
+```go
+func (this *ReplicateReq) Equal(that interface{}) bool
+```
+
+#### func (*ReplicateReq) GetCommitter
+
+```go
+func (m *ReplicateReq) GetCommitter() *LeaderId
+```
+
+#### func (*ReplicateReq) GetLogs
+
+```go
+func (m *ReplicateReq) GetLogs() []*Record
+```
+
+#### func (*ReplicateReq) Marshal
+
+```go
+func (m *ReplicateReq) Marshal() (dAtA []byte, err error)
+```
+
+#### func (*ReplicateReq) MarshalTo
+
+```go
+func (m *ReplicateReq) MarshalTo(dAtA []byte) (int, error)
+```
+
+#### func (*ReplicateReq) MarshalToSizedBuffer
+
+```go
+func (m *ReplicateReq) MarshalToSizedBuffer(dAtA []byte) (int, error)
+```
+
+#### func (*ReplicateReq) ProtoMessage
+
+```go
+func (*ReplicateReq) ProtoMessage()
+```
+
+#### func (*ReplicateReq) Reset
+
+```go
+func (m *ReplicateReq) Reset()
+```
+
+#### func (*ReplicateReq) Size
+
+```go
+func (m *ReplicateReq) Size() (n int)
+```
+
+#### func (*ReplicateReq) String
+
+```go
+func (m *ReplicateReq) String() string
+```
+
+#### func (*ReplicateReq) Unmarshal
+
+```go
+func (m *ReplicateReq) Unmarshal(dAtA []byte) error
+```
+
+#### func (*ReplicateReq) XXX_DiscardUnknown
+
+```go
+func (m *ReplicateReq) XXX_DiscardUnknown()
+```
+
+#### func (*ReplicateReq) XXX_Marshal
+
+```go
+func (m *ReplicateReq) XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+```
+
+#### func (*ReplicateReq) XXX_Merge
+
+```go
+func (m *ReplicateReq) XXX_Merge(src proto.Message)
+```
+
+#### func (*ReplicateReq) XXX_Size
+
+```go
+func (m *ReplicateReq) XXX_Size() int
+```
+
+#### func (*ReplicateReq) XXX_Unmarshal
+
+```go
+func (m *ReplicateReq) XXX_Unmarshal(b []byte) error
+```
+
 #### type TRaft
 
 ```go
@@ -1230,7 +1374,7 @@ type TRaft struct {
 #### func (*TRaft) Replicate
 
 ```go
-func (tr *TRaft) Replicate(ctx context.Context, req *Record) (*ReplicateReply, error)
+func (tr *TRaft) Replicate(ctx context.Context, req *ReplicateReq) (*ReplicateReply, error)
 ```
 
 #### func (*TRaft) Vote
@@ -1244,7 +1388,7 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error)
 ```go
 type TRaftClient interface {
 	Vote(ctx context.Context, in *VoteReq, opts ...grpc.CallOption) (*VoteReply, error)
-	Replicate(ctx context.Context, in *Record, opts ...grpc.CallOption) (*ReplicateReply, error)
+	Replicate(ctx context.Context, in *ReplicateReq, opts ...grpc.CallOption) (*ReplicateReply, error)
 }
 ```
 
@@ -1264,7 +1408,7 @@ func NewTRaftClient(cc *grpc.ClientConn) TRaftClient
 ```go
 type TRaftServer interface {
 	Vote(context.Context, *VoteReq) (*VoteReply, error)
-	Replicate(context.Context, *Record) (*ReplicateReply, error)
+	Replicate(context.Context, *ReplicateReq) (*ReplicateReply, error)
 }
 ```
 
@@ -1493,7 +1637,7 @@ implementations.
 #### func (*UnimplementedTRaftServer) Replicate
 
 ```go
-func (*UnimplementedTRaftServer) Replicate(ctx context.Context, req *Record) (*ReplicateReply, error)
+func (*UnimplementedTRaftServer) Replicate(ctx context.Context, req *ReplicateReq) (*ReplicateReply, error)
 ```
 
 #### func (*UnimplementedTRaftServer) Vote

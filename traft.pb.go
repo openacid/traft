@@ -302,42 +302,6 @@ func (m *Record) GetOverrides() *TailBitmap {
 	return nil
 }
 
-type ReplicateReply struct {
-}
-
-func (m *ReplicateReply) Reset()         { *m = ReplicateReply{} }
-func (m *ReplicateReply) String() string { return proto.CompactTextString(m) }
-func (*ReplicateReply) ProtoMessage()    {}
-func (*ReplicateReply) Descriptor() ([]byte, []int) {
-	return fileDescriptor_39aa4f94ef5dbc0b, []int{3}
-}
-func (m *ReplicateReply) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *ReplicateReply) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_ReplicateReply.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *ReplicateReply) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ReplicateReply.Merge(m, src)
-}
-func (m *ReplicateReply) XXX_Size() int {
-	return m.Size()
-}
-func (m *ReplicateReply) XXX_DiscardUnknown() {
-	xxx_messageInfo_ReplicateReply.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ReplicateReply proto.InternalMessageInfo
-
 type LeaderId struct {
 	Term int64 `protobuf:"varint,1,opt,name=Term,proto3" json:"Term,omitempty"`
 	Id   int64 `protobuf:"varint,2,opt,name=Id,proto3" json:"Id,omitempty"`
@@ -347,7 +311,7 @@ func (m *LeaderId) Reset()         { *m = LeaderId{} }
 func (m *LeaderId) String() string { return proto.CompactTextString(m) }
 func (*LeaderId) ProtoMessage()    {}
 func (*LeaderId) Descriptor() ([]byte, []int) {
-	return fileDescriptor_39aa4f94ef5dbc0b, []int{4}
+	return fileDescriptor_39aa4f94ef5dbc0b, []int{3}
 }
 func (m *LeaderId) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -405,7 +369,7 @@ func (m *Node) Reset()         { *m = Node{} }
 func (m *Node) String() string { return proto.CompactTextString(m) }
 func (*Node) ProtoMessage()    {}
 func (*Node) Descriptor() ([]byte, []int) {
-	return fileDescriptor_39aa4f94ef5dbc0b, []int{5}
+	return fileDescriptor_39aa4f94ef5dbc0b, []int{4}
 }
 func (m *Node) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -505,7 +469,7 @@ func (m *ReplicaStatus) Reset()         { *m = ReplicaStatus{} }
 func (m *ReplicaStatus) String() string { return proto.CompactTextString(m) }
 func (*ReplicaStatus) ProtoMessage()    {}
 func (*ReplicaStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_39aa4f94ef5dbc0b, []int{6}
+	return fileDescriptor_39aa4f94ef5dbc0b, []int{5}
 }
 func (m *ReplicaStatus) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -578,7 +542,7 @@ func (m *ReplicaInfo) Reset()         { *m = ReplicaInfo{} }
 func (m *ReplicaInfo) String() string { return proto.CompactTextString(m) }
 func (*ReplicaInfo) ProtoMessage()    {}
 func (*ReplicaInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_39aa4f94ef5dbc0b, []int{7}
+	return fileDescriptor_39aa4f94ef5dbc0b, []int{6}
 }
 func (m *ReplicaInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -630,7 +594,7 @@ func (m *ClusterConfig) Reset()         { *m = ClusterConfig{} }
 func (m *ClusterConfig) String() string { return proto.CompactTextString(m) }
 func (*ClusterConfig) ProtoMessage()    {}
 func (*ClusterConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_39aa4f94ef5dbc0b, []int{8}
+	return fileDescriptor_39aa4f94ef5dbc0b, []int{7}
 }
 func (m *ClusterConfig) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -686,7 +650,7 @@ func (m *VoteReq) Reset()         { *m = VoteReq{} }
 func (m *VoteReq) String() string { return proto.CompactTextString(m) }
 func (*VoteReq) ProtoMessage()    {}
 func (*VoteReq) Descriptor() ([]byte, []int) {
-	return fileDescriptor_39aa4f94ef5dbc0b, []int{9}
+	return fileDescriptor_39aa4f94ef5dbc0b, []int{8}
 }
 func (m *VoteReq) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -752,7 +716,7 @@ func (m *VoteReply) Reset()         { *m = VoteReply{} }
 func (m *VoteReply) String() string { return proto.CompactTextString(m) }
 func (*VoteReply) ProtoMessage()    {}
 func (*VoteReply) Descriptor() ([]byte, []int) {
-	return fileDescriptor_39aa4f94ef5dbc0b, []int{10}
+	return fileDescriptor_39aa4f94ef5dbc0b, []int{9}
 }
 func (m *VoteReply) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -809,11 +773,125 @@ func (m *VoteReply) GetLogs() []*Record {
 	return nil
 }
 
+type ReplicateReq struct {
+	Committer *LeaderId `protobuf:"bytes,1,opt,name=Committer,proto3" json:"Committer,omitempty"`
+	Logs      []*Record `protobuf:"bytes,2,rep,name=Logs,proto3" json:"Logs,omitempty"`
+}
+
+func (m *ReplicateReq) Reset()         { *m = ReplicateReq{} }
+func (m *ReplicateReq) String() string { return proto.CompactTextString(m) }
+func (*ReplicateReq) ProtoMessage()    {}
+func (*ReplicateReq) Descriptor() ([]byte, []int) {
+	return fileDescriptor_39aa4f94ef5dbc0b, []int{10}
+}
+func (m *ReplicateReq) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ReplicateReq) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ReplicateReq.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ReplicateReq) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ReplicateReq.Merge(m, src)
+}
+func (m *ReplicateReq) XXX_Size() int {
+	return m.Size()
+}
+func (m *ReplicateReq) XXX_DiscardUnknown() {
+	xxx_messageInfo_ReplicateReq.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ReplicateReq proto.InternalMessageInfo
+
+func (m *ReplicateReq) GetCommitter() *LeaderId {
+	if m != nil {
+		return m.Committer
+	}
+	return nil
+}
+
+func (m *ReplicateReq) GetLogs() []*Record {
+	if m != nil {
+		return m.Logs
+	}
+	return nil
+}
+
+type ReplicateReply struct {
+	// A replica responding a VotedFor with the same value with
+	// ReplciateReq.Committer indicates the logs are accepted.
+	// Otherwise declined.
+	VotedFor  *LeaderId   `protobuf:"bytes,1,opt,name=VotedFor,proto3" json:"VotedFor,omitempty"`
+	Accepted  *TailBitmap `protobuf:"bytes,2,opt,name=Accepted,proto3" json:"Accepted,omitempty"`
+	Committed *TailBitmap `protobuf:"bytes,3,opt,name=Committed,proto3" json:"Committed,omitempty"`
+}
+
+func (m *ReplicateReply) Reset()         { *m = ReplicateReply{} }
+func (m *ReplicateReply) String() string { return proto.CompactTextString(m) }
+func (*ReplicateReply) ProtoMessage()    {}
+func (*ReplicateReply) Descriptor() ([]byte, []int) {
+	return fileDescriptor_39aa4f94ef5dbc0b, []int{11}
+}
+func (m *ReplicateReply) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ReplicateReply) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ReplicateReply.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ReplicateReply) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ReplicateReply.Merge(m, src)
+}
+func (m *ReplicateReply) XXX_Size() int {
+	return m.Size()
+}
+func (m *ReplicateReply) XXX_DiscardUnknown() {
+	xxx_messageInfo_ReplicateReply.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ReplicateReply proto.InternalMessageInfo
+
+func (m *ReplicateReply) GetVotedFor() *LeaderId {
+	if m != nil {
+		return m.VotedFor
+	}
+	return nil
+}
+
+func (m *ReplicateReply) GetAccepted() *TailBitmap {
+	if m != nil {
+		return m.Accepted
+	}
+	return nil
+}
+
+func (m *ReplicateReply) GetCommitted() *TailBitmap {
+	if m != nil {
+		return m.Committed
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterType((*Cmd)(nil), "Cmd")
 	proto.RegisterType((*TailBitmap)(nil), "TailBitmap")
 	proto.RegisterType((*Record)(nil), "Record")
-	proto.RegisterType((*ReplicateReply)(nil), "ReplicateReply")
 	proto.RegisterType((*LeaderId)(nil), "LeaderId")
 	proto.RegisterType((*Node)(nil), "Node")
 	proto.RegisterMapType((map[int64]*ReplicaStatus)(nil), "Node.StatusEntry")
@@ -822,59 +900,63 @@ func init() {
 	proto.RegisterType((*ClusterConfig)(nil), "ClusterConfig")
 	proto.RegisterType((*VoteReq)(nil), "VoteReq")
 	proto.RegisterType((*VoteReply)(nil), "VoteReply")
+	proto.RegisterType((*ReplicateReq)(nil), "ReplicateReq")
+	proto.RegisterType((*ReplicateReply)(nil), "ReplicateReply")
 }
 
 func init() { proto.RegisterFile("traft.proto", fileDescriptor_39aa4f94ef5dbc0b) }
 
 var fileDescriptor_39aa4f94ef5dbc0b = []byte{
-	// 747 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x54, 0x4d, 0x6f, 0xeb, 0x44,
-	0x14, 0xcd, 0xc4, 0xce, 0xd7, 0x35, 0x2f, 0x3c, 0x46, 0xe5, 0x69, 0x08, 0xc8, 0xe4, 0x59, 0xf4,
-	0xbd, 0x74, 0x81, 0x2b, 0x42, 0x55, 0x55, 0xb0, 0x4a, 0x23, 0x50, 0x23, 0x02, 0xa1, 0xd3, 0x2a,
-	0x48, 0xec, 0x9c, 0xcc, 0x24, 0xb5, 0x88, 0x33, 0xee, 0x78, 0x5c, 0x29, 0x3b, 0x16, 0xfc, 0x00,
-	0x56, 0xec, 0xd9, 0xf1, 0x53, 0x58, 0x76, 0x89, 0x58, 0xa1, 0x74, 0xcd, 0x7f, 0x40, 0x33, 0x99,
-	0x24, 0x75, 0x41, 0x88, 0x1d, 0xbb, 0x7b, 0xcf, 0xb9, 0x33, 0x73, 0xef, 0x39, 0xbe, 0x06, 0x4f,
-	0xc9, 0x68, 0xa6, 0xc2, 0x54, 0x0a, 0x25, 0x5a, 0x1f, 0xce, 0x63, 0x75, 0x93, 0x4f, 0xc2, 0xa9,
-	0x48, 0x8e, 0xe7, 0x62, 0x2e, 0x8e, 0x0d, 0x3c, 0xc9, 0x67, 0x26, 0x33, 0x89, 0x89, 0x36, 0xe5,
-	0xc1, 0x4f, 0x08, 0x9c, 0x7e, 0xc2, 0x70, 0x13, 0xca, 0xa3, 0x94, 0x40, 0x1b, 0x75, 0x1a, 0xb4,
-	0x3c, 0x4a, 0xf1, 0x73, 0x70, 0xbe, 0xe0, 0x2b, 0x72, 0x60, 0x00, 0x1d, 0xe2, 0x03, 0x70, 0xc7,
-	0x57, 0x4a, 0x92, 0xf7, 0x35, 0x74, 0x51, 0xa2, 0x26, 0x33, 0xe8, 0xe0, 0xf4, 0x84, 0xb4, 0xdb,
-	0xa8, 0xe3, 0x18, 0x74, 0x70, 0x7a, 0x82, 0xcf, 0xa0, 0x39, 0xee, 0x2f, 0xf2, 0x4c, 0x71, 0xd9,
-	0x17, 0xcb, 0x59, 0x3c, 0x27, 0x2f, 0xdb, 0xa8, 0xe3, 0x75, 0x9b, 0x61, 0x01, 0xbd, 0x28, 0xd1,
-	0x27, 0x75, 0xe7, 0x35, 0xa8, 0x8c, 0xa3, 0x45, 0xce, 0x83, 0x31, 0xc0, 0x75, 0x14, 0x2f, 0xce,
-	0x63, 0x95, 0x44, 0x29, 0x7e, 0x01, 0xd5, 0xd1, 0x6c, 0x96, 0x71, 0x45, 0x90, 0x7e, 0x88, 0xda,
-	0x0c, 0x1f, 0x40, 0xe5, 0x1b, 0x21, 0x59, 0x46, 0xca, 0x6d, 0xa7, 0xe3, 0xd2, 0x4d, 0x82, 0x5b,
-	0x50, 0xa7, 0x7c, 0xba, 0x88, 0x12, 0xce, 0x88, 0x63, 0xea, 0x77, 0x79, 0xf0, 0x3d, 0x82, 0x2a,
-	0xe5, 0x53, 0x21, 0x19, 0x7e, 0x09, 0xd5, 0x5e, 0xae, 0x6e, 0x84, 0x34, 0x97, 0x7a, 0xdd, 0x46,
-	0x38, 0xe4, 0x11, 0xe3, 0x72, 0xc0, 0xa8, 0x25, 0xb4, 0x0c, 0x57, 0xfc, 0xd6, 0xe8, 0xe2, 0x50,
-	0x1d, 0xe2, 0x17, 0x46, 0x2f, 0xe2, 0x9b, 0x13, 0x6e, 0xd8, 0x4f, 0x18, 0x35, 0x02, 0x1e, 0x41,
-	0x63, 0x74, 0xc7, 0xa5, 0x8c, 0x19, 0xcf, 0x48, 0xc7, 0xb0, 0x5e, 0xb8, 0x9f, 0x80, 0xee, 0xd9,
-	0xe0, 0x39, 0x34, 0x29, 0x4f, 0x17, 0xf1, 0x34, 0x52, 0x5c, 0x07, 0xab, 0x20, 0x84, 0xfa, 0xf6,
-	0x69, 0x8c, 0xc1, 0xbd, 0xe6, 0x32, 0xb1, 0x83, 0x9a, 0x58, 0xbb, 0x33, 0x60, 0xa4, 0x6c, 0x90,
-	0xf2, 0x80, 0x05, 0x7f, 0x22, 0x70, 0xbf, 0x12, 0x8c, 0x5b, 0xc2, 0xd9, 0x12, 0xf8, 0x15, 0x54,
-	0xad, 0xe0, 0xe8, 0x9f, 0x04, 0xa7, 0x96, 0xc5, 0xef, 0x41, 0x63, 0x28, 0xe6, 0x56, 0x52, 0xd7,
-	0x1c, 0xdf, 0x03, 0xf8, 0x1d, 0x70, 0x86, 0x62, 0x6e, 0x34, 0xf5, 0xba, 0xb5, 0x70, 0x23, 0x17,
-	0xd5, 0x18, 0x3e, 0x82, 0xea, 0x95, 0x8a, 0x54, 0x9e, 0x91, 0xaa, 0x61, 0xdf, 0x0a, 0x75, 0x1f,
-	0xe1, 0x06, 0xfb, 0x6c, 0xa9, 0xe4, 0x8a, 0xda, 0x82, 0xd6, 0x00, 0xbc, 0x47, 0xb0, 0x96, 0xf2,
-	0x3b, 0xbe, 0xb2, 0x63, 0xe9, 0x10, 0x7f, 0x00, 0x95, 0x3b, 0xed, 0xb5, 0x19, 0x4c, 0xf7, 0x6a,
-	0x55, 0xd9, 0x9c, 0xa2, 0x1b, 0xf2, 0x93, 0xf2, 0x19, 0x0a, 0x7e, 0x47, 0xf0, 0xac, 0x40, 0xe2,
-	0x43, 0xa8, 0x8f, 0x85, 0xe2, 0xec, 0x73, 0x21, 0x8d, 0x3b, 0x05, 0xf7, 0x76, 0x14, 0x7e, 0x0d,
-	0x8d, 0xbe, 0x48, 0x92, 0x58, 0x29, 0x2e, 0xcd, 0x9c, 0x85, 0xba, 0x3d, 0x87, 0x5f, 0x43, 0xbd,
-	0x37, 0x9d, 0xf2, 0x54, 0x71, 0x66, 0xa5, 0x2b, 0xb8, 0xb7, 0x23, 0xb5, 0xcf, 0xdb, 0x53, 0xcc,
-	0x36, 0x5e, 0xf4, 0x79, 0xc7, 0xe2, 0x43, 0xa8, 0xf5, 0xd2, 0x74, 0x11, 0xdb, 0xaf, 0xf0, 0x49,
-	0xe1, 0x96, 0x0b, 0x3e, 0x02, 0xcf, 0xce, 0x36, 0x58, 0xce, 0x84, 0xb5, 0x14, 0xed, 0x2c, 0xc5,
-	0xe0, 0xf6, 0x18, 0x93, 0xe6, 0xad, 0x06, 0x35, 0x71, 0x70, 0x09, 0xcf, 0x0a, 0xbe, 0xe2, 0x57,
-	0x50, 0xfb, 0x92, 0x27, 0x13, 0x2e, 0x33, 0xe2, 0x19, 0x5f, 0xde, 0x08, 0x1f, 0xdd, 0x49, 0xb7,
-	0x24, 0x26, 0x50, 0xbb, 0xcc, 0x85, 0xcc, 0x93, 0x8c, 0xbc, 0x6d, 0x36, 0x66, 0x9b, 0x06, 0x3f,
-	0x20, 0xa8, 0x69, 0xd9, 0x28, 0xbf, 0x35, 0xaa, 0x45, 0x4b, 0x16, 0xb3, 0x48, 0xf1, 0xbf, 0xef,
-	0xc6, 0x9e, 0x2b, 0xca, 0x5b, 0xfe, 0x8f, 0xf2, 0x3a, 0xff, 0x22, 0x6f, 0xf0, 0x33, 0x82, 0xc6,
-	0xa6, 0x8d, 0x74, 0xb1, 0xfa, 0xff, 0x5c, 0x7e, 0x17, 0xdc, 0xa1, 0x98, 0x67, 0xc4, 0x2f, 0xae,
-	0x80, 0x01, 0xbb, 0x5f, 0x43, 0xe5, 0x9a, 0x46, 0x33, 0x85, 0x7d, 0x70, 0x75, 0x0f, 0xb8, 0x1e,
-	0x5a, 0xe5, 0x5a, 0x10, 0xee, 0x9a, 0x0f, 0x4a, 0xba, 0xaf, 0xdd, 0xa2, 0xe3, 0xed, 0x25, 0xad,
-	0x37, 0xc3, 0x27, 0xdb, 0x5f, 0x3a, 0x3f, 0xfc, 0x65, 0xed, 0xa3, 0x5f, 0xd7, 0x3e, 0xba, 0x5f,
-	0xfb, 0xe8, 0x8f, 0xb5, 0x8f, 0x7e, 0x7c, 0xf0, 0x4b, 0xf7, 0x0f, 0x7e, 0xe9, 0xb7, 0x07, 0xbf,
-	0xf4, 0x6d, 0x2d, 0xfc, 0xd4, 0xfc, 0xe1, 0x27, 0x55, 0xf3, 0xcf, 0xfe, 0xf8, 0xaf, 0x00, 0x00,
-	0x00, 0xff, 0xff, 0x17, 0x92, 0x83, 0x88, 0xf1, 0x05, 0x00, 0x00,
+	// 783 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x55, 0x41, 0x8f, 0xdb, 0x44,
+	0x14, 0xce, 0xd8, 0xde, 0x24, 0x7e, 0xee, 0x2e, 0x30, 0x5a, 0xaa, 0x21, 0x20, 0x93, 0x5a, 0x6c,
+	0x9b, 0x1e, 0x3a, 0x15, 0x4b, 0x55, 0x55, 0x70, 0xda, 0x8d, 0x40, 0x8d, 0x58, 0x58, 0x75, 0x36,
+	0x0a, 0x12, 0x37, 0x27, 0x33, 0x49, 0x2d, 0xe2, 0x8c, 0x3b, 0x1e, 0x57, 0xca, 0x8d, 0x03, 0x37,
+	0x2e, 0x9c, 0xb8, 0x73, 0xe3, 0xa7, 0x70, 0xec, 0x11, 0x71, 0x42, 0xd9, 0x33, 0xff, 0x01, 0x79,
+	0x32, 0x71, 0xe2, 0xa5, 0x8a, 0xf6, 0xc6, 0xed, 0xbd, 0xef, 0x7b, 0x33, 0xef, 0xbd, 0xef, 0x1b,
+	0xcb, 0x10, 0x68, 0x15, 0x4f, 0x35, 0xcd, 0x94, 0xd4, 0xb2, 0xf3, 0x68, 0x96, 0xe8, 0x97, 0xc5,
+	0x98, 0x4e, 0x64, 0xfa, 0x78, 0x26, 0x67, 0xf2, 0xb1, 0x81, 0xc7, 0xc5, 0xd4, 0x64, 0x26, 0x31,
+	0xd1, 0xba, 0x3c, 0xfa, 0x15, 0x81, 0xdb, 0x4f, 0x39, 0x3e, 0x02, 0xe7, 0x32, 0x23, 0xd0, 0x45,
+	0x3d, 0x9f, 0x39, 0x97, 0x19, 0x7e, 0x17, 0xdc, 0xaf, 0xc5, 0x92, 0x1c, 0x1b, 0xa0, 0x0c, 0xf1,
+	0x31, 0x78, 0xa3, 0x2b, 0xad, 0xc8, 0xc7, 0x25, 0xf4, 0xbc, 0xc1, 0x4c, 0x66, 0xd0, 0xc1, 0xd3,
+	0x27, 0xa4, 0xdb, 0x45, 0x3d, 0xd7, 0xa0, 0x83, 0xa7, 0x4f, 0xf0, 0x33, 0x38, 0x1a, 0xf5, 0xe7,
+	0x45, 0xae, 0x85, 0xea, 0xcb, 0xc5, 0x34, 0x99, 0x91, 0x7b, 0x5d, 0xd4, 0x0b, 0x4e, 0x8f, 0x68,
+	0x0d, 0x7d, 0xde, 0x60, 0x37, 0xea, 0xce, 0x5b, 0x70, 0x30, 0x8a, 0xe7, 0x85, 0x88, 0x46, 0x00,
+	0xc3, 0x38, 0x99, 0x9f, 0x27, 0x3a, 0x8d, 0x33, 0x7c, 0x17, 0x9a, 0x97, 0xd3, 0x69, 0x2e, 0x34,
+	0x41, 0x65, 0x23, 0x66, 0x33, 0x7c, 0x0c, 0x07, 0xdf, 0x49, 0xc5, 0x73, 0xe2, 0x74, 0xdd, 0x9e,
+	0xc7, 0xd6, 0x09, 0xee, 0x40, 0x9b, 0x89, 0xc9, 0x3c, 0x4e, 0x05, 0x27, 0xae, 0xa9, 0xaf, 0xf2,
+	0xe8, 0x47, 0x04, 0x4d, 0x26, 0x26, 0x52, 0x71, 0x7c, 0x0f, 0x9a, 0x67, 0x85, 0x7e, 0x29, 0x95,
+	0xb9, 0x34, 0x38, 0xf5, 0xe9, 0x85, 0x88, 0xb9, 0x50, 0x03, 0xce, 0x2c, 0x51, 0xca, 0x70, 0x25,
+	0x5e, 0x19, 0x5d, 0x5c, 0x56, 0x86, 0xf8, 0xae, 0xd1, 0x8b, 0x84, 0xe6, 0x84, 0x47, 0xfb, 0x29,
+	0x67, 0x46, 0xc0, 0x87, 0xe0, 0x5f, 0xbe, 0x16, 0x4a, 0x25, 0x5c, 0xe4, 0xa4, 0x67, 0xd8, 0x80,
+	0x6e, 0x37, 0x60, 0x5b, 0x36, 0xa2, 0xd0, 0xde, 0x34, 0xc2, 0x18, 0xbc, 0xa1, 0x50, 0xa9, 0x5d,
+	0xcb, 0xc4, 0xa5, 0x17, 0x03, 0x4e, 0x1c, 0x83, 0x38, 0x03, 0x1e, 0xfd, 0x83, 0xc0, 0xfb, 0x56,
+	0x72, 0x61, 0x09, 0x77, 0x43, 0xe0, 0xfb, 0xd0, 0xb4, 0xf2, 0xa2, 0xb7, 0xc9, 0xcb, 0x2c, 0x8b,
+	0x3f, 0x02, 0xff, 0x42, 0xce, 0xac, 0x80, 0x9e, 0x39, 0xbe, 0x05, 0xf0, 0x07, 0xe0, 0x5e, 0xc8,
+	0x99, 0x51, 0x30, 0x38, 0x6d, 0xd1, 0xb5, 0x38, 0xac, 0xc4, 0xf0, 0x43, 0x68, 0x5e, 0xe9, 0x58,
+	0x17, 0x39, 0x69, 0x1a, 0xf6, 0x3d, 0x5a, 0xce, 0x41, 0xd7, 0xd8, 0x97, 0x0b, 0xad, 0x96, 0xcc,
+	0x16, 0x74, 0x06, 0x10, 0xec, 0xc0, 0xa5, 0x70, 0x3f, 0x88, 0xa5, 0x5d, 0xab, 0x0c, 0xf1, 0x27,
+	0x70, 0xf0, 0xba, 0x74, 0xd6, 0x2c, 0x56, 0xce, 0xca, 0x44, 0x36, 0x4f, 0x26, 0xf1, 0xfa, 0x14,
+	0x5b, 0x93, 0x9f, 0x3b, 0xcf, 0x50, 0xf4, 0x17, 0x82, 0xc3, 0x1a, 0x89, 0x4f, 0xa0, 0x3d, 0x92,
+	0x5a, 0xf0, 0xaf, 0xa4, 0x32, 0x5e, 0xd4, 0xbc, 0xaa, 0x28, 0xfc, 0x00, 0xfc, 0xbe, 0x4c, 0xd3,
+	0x44, 0x6b, 0xa1, 0xcc, 0x9e, 0xb5, 0xba, 0x2d, 0x87, 0x1f, 0x40, 0xfb, 0x6c, 0x32, 0x11, 0x99,
+	0x16, 0xdc, 0x4a, 0x57, 0xf3, 0xaa, 0x22, 0x4b, 0x57, 0x37, 0xa7, 0xb8, 0x1d, 0xbc, 0xee, 0x6a,
+	0xc5, 0xe2, 0x13, 0x68, 0x9d, 0x65, 0xd9, 0x3c, 0xb1, 0x6f, 0xee, 0x46, 0xe1, 0x86, 0x8b, 0x3e,
+	0x85, 0xc0, 0xee, 0x36, 0x58, 0x4c, 0xa5, 0xb5, 0x14, 0x55, 0x96, 0x62, 0xf0, 0xce, 0x38, 0x57,
+	0xa6, 0x97, 0xcf, 0x4c, 0x1c, 0xbd, 0x80, 0xc3, 0x9a, 0xaf, 0xf8, 0x3e, 0xb4, 0xbe, 0x11, 0xe9,
+	0x58, 0xa8, 0x9c, 0x04, 0xc6, 0x97, 0x3b, 0x74, 0xe7, 0x4e, 0xb6, 0x21, 0x31, 0x81, 0xd6, 0x8b,
+	0x42, 0xaa, 0x22, 0xcd, 0xc9, 0xfb, 0xe6, 0xfb, 0xd8, 0xa4, 0xd1, 0x4f, 0x08, 0x5a, 0xa5, 0x6c,
+	0x4c, 0xbc, 0x32, 0xaa, 0xc5, 0x0b, 0x9e, 0xf0, 0x58, 0x8b, 0xff, 0x7e, 0x09, 0x5b, 0xae, 0x2e,
+	0xaf, 0x73, 0x4b, 0x79, 0xdd, 0x3d, 0xf2, 0x46, 0xbf, 0x21, 0xf0, 0xd7, 0x63, 0x64, 0xf3, 0xe5,
+	0xff, 0xe7, 0xf2, 0x87, 0xe0, 0x5d, 0xc8, 0x59, 0x4e, 0xc2, 0xfa, 0x27, 0x60, 0xc0, 0x68, 0x08,
+	0x77, 0xac, 0xb8, 0x5b, 0xb9, 0xaa, 0xf6, 0x68, 0x4f, 0xfb, 0xcd, 0xad, 0xce, 0xdb, 0x6e, 0xfd,
+	0x19, 0xc1, 0xd1, 0xce, 0xb5, 0x37, 0xd7, 0x47, 0xfb, 0xd6, 0xdf, 0x6e, 0xe5, 0xdc, 0xfa, 0xed,
+	0xba, 0xfb, 0xde, 0xee, 0xe9, 0x08, 0x0e, 0x86, 0x2c, 0x9e, 0x6a, 0x1c, 0x82, 0x57, 0x36, 0xc2,
+	0x6d, 0x6a, 0x5f, 0x47, 0x07, 0x68, 0x65, 0x50, 0xd4, 0xc0, 0x8f, 0xc0, 0xaf, 0xa6, 0xc6, 0x87,
+	0x74, 0x57, 0x98, 0xce, 0x3b, 0xb4, 0xbe, 0x50, 0xd4, 0x38, 0x3f, 0xf9, 0x7d, 0x15, 0xa2, 0x3f,
+	0x56, 0x21, 0x7a, 0xb3, 0x0a, 0xd1, 0xdf, 0xab, 0x10, 0xfd, 0x72, 0x1d, 0x36, 0xde, 0x5c, 0x87,
+	0x8d, 0x3f, 0xaf, 0xc3, 0xc6, 0xf7, 0x2d, 0xfa, 0x85, 0xf9, 0x73, 0x8d, 0x9b, 0xe6, 0x5f, 0xf4,
+	0xd9, 0xbf, 0x01, 0x00, 0x00, 0xff, 0xff, 0x59, 0xdb, 0xc6, 0xba, 0xc9, 0x06, 0x00, 0x00,
 }
 
 func (this *Cmd) Equal(that interface{}) bool {
@@ -1049,27 +1131,6 @@ func (this *Record) Equal(that interface{}) bool {
 		return false
 	}
 	if !this.Overrides.Equal(that1.Overrides) {
-		return false
-	}
-	return true
-}
-func (this *ReplicateReply) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*ReplicateReply)
-	if !ok {
-		that2, ok := that.(ReplicateReply)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
 		return false
 	}
 	return true
@@ -1315,6 +1376,68 @@ func (this *VoteReply) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *ReplicateReq) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*ReplicateReq)
+	if !ok {
+		that2, ok := that.(ReplicateReq)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if !this.Committer.Equal(that1.Committer) {
+		return false
+	}
+	if len(this.Logs) != len(that1.Logs) {
+		return false
+	}
+	for i := range this.Logs {
+		if !this.Logs[i].Equal(that1.Logs[i]) {
+			return false
+		}
+	}
+	return true
+}
+func (this *ReplicateReply) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*ReplicateReply)
+	if !ok {
+		that2, ok := that.(ReplicateReply)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if !this.VotedFor.Equal(that1.VotedFor) {
+		return false
+	}
+	if !this.Accepted.Equal(that1.Accepted) {
+		return false
+	}
+	if !this.Committed.Equal(that1.Committed) {
+		return false
+	}
+	return true
+}
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ context.Context
@@ -1329,7 +1452,7 @@ const _ = grpc.SupportPackageIsVersion4
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type TRaftClient interface {
 	Vote(ctx context.Context, in *VoteReq, opts ...grpc.CallOption) (*VoteReply, error)
-	Replicate(ctx context.Context, in *Record, opts ...grpc.CallOption) (*ReplicateReply, error)
+	Replicate(ctx context.Context, in *ReplicateReq, opts ...grpc.CallOption) (*ReplicateReply, error)
 }
 
 type tRaftClient struct {
@@ -1349,7 +1472,7 @@ func (c *tRaftClient) Vote(ctx context.Context, in *VoteReq, opts ...grpc.CallOp
 	return out, nil
 }
 
-func (c *tRaftClient) Replicate(ctx context.Context, in *Record, opts ...grpc.CallOption) (*ReplicateReply, error) {
+func (c *tRaftClient) Replicate(ctx context.Context, in *ReplicateReq, opts ...grpc.CallOption) (*ReplicateReply, error) {
 	out := new(ReplicateReply)
 	err := c.cc.Invoke(ctx, "/TRaft/Replicate", in, out, opts...)
 	if err != nil {
@@ -1361,7 +1484,7 @@ func (c *tRaftClient) Replicate(ctx context.Context, in *Record, opts ...grpc.Ca
 // TRaftServer is the server API for TRaft service.
 type TRaftServer interface {
 	Vote(context.Context, *VoteReq) (*VoteReply, error)
-	Replicate(context.Context, *Record) (*ReplicateReply, error)
+	Replicate(context.Context, *ReplicateReq) (*ReplicateReply, error)
 }
 
 // UnimplementedTRaftServer can be embedded to have forward compatible implementations.
@@ -1371,7 +1494,7 @@ type UnimplementedTRaftServer struct {
 func (*UnimplementedTRaftServer) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Vote not implemented")
 }
-func (*UnimplementedTRaftServer) Replicate(ctx context.Context, req *Record) (*ReplicateReply, error) {
+func (*UnimplementedTRaftServer) Replicate(ctx context.Context, req *ReplicateReq) (*ReplicateReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Replicate not implemented")
 }
 
@@ -1398,7 +1521,7 @@ func _TRaft_Vote_Handler(srv interface{}, ctx context.Context, dec func(interfac
 }
 
 func _TRaft_Replicate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Record)
+	in := new(ReplicateReq)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -1410,7 +1533,7 @@ func _TRaft_Replicate_Handler(srv interface{}, ctx context.Context, dec func(int
 		FullMethod: "/TRaft/Replicate",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(TRaftServer).Replicate(ctx, req.(*Record))
+		return srv.(TRaftServer).Replicate(ctx, req.(*ReplicateReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1649,29 +1772,6 @@ func (m *Record) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0xa
 	}
-	return len(dAtA) - i, nil
-}
-
-func (m *ReplicateReply) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *ReplicateReply) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *ReplicateReply) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
 	return len(dAtA) - i, nil
 }
 
@@ -2100,6 +2200,114 @@ func (m *VoteReply) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *ReplicateReq) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ReplicateReq) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ReplicateReq) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Logs) > 0 {
+		for iNdEx := len(m.Logs) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Logs[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTraft(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if m.Committer != nil {
+		{
+			size, err := m.Committer.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTraft(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ReplicateReply) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ReplicateReply) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ReplicateReply) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Committed != nil {
+		{
+			size, err := m.Committed.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTraft(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1a
+	}
+	if m.Accepted != nil {
+		{
+			size, err := m.Accepted.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTraft(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.VotedFor != nil {
+		{
+			size, err := m.VotedFor.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTraft(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintTraft(dAtA []byte, offset int, v uint64) int {
 	offset -= sovTraft(v)
 	base := offset
@@ -2205,15 +2413,6 @@ func (m *Record) Size() (n int) {
 		l = m.Overrides.Size()
 		n += 2 + l + sovTraft(uint64(l))
 	}
-	return n
-}
-
-func (m *ReplicateReply) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
 	return n
 }
 
@@ -2381,6 +2580,46 @@ func (m *VoteReply) Size() (n int) {
 			l = e.Size()
 			n += 2 + l + sovTraft(uint64(l))
 		}
+	}
+	return n
+}
+
+func (m *ReplicateReq) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Committer != nil {
+		l = m.Committer.Size()
+		n += 1 + l + sovTraft(uint64(l))
+	}
+	if len(m.Logs) > 0 {
+		for _, e := range m.Logs {
+			l = e.Size()
+			n += 1 + l + sovTraft(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *ReplicateReply) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.VotedFor != nil {
+		l = m.VotedFor.Size()
+		n += 1 + l + sovTraft(uint64(l))
+	}
+	if m.Accepted != nil {
+		l = m.Accepted.Size()
+		n += 1 + l + sovTraft(uint64(l))
+	}
+	if m.Committed != nil {
+		l = m.Committed.Size()
+		n += 1 + l + sovTraft(uint64(l))
 	}
 	return n
 }
@@ -2912,56 +3151,6 @@ func (m *Record) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipTraft(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthTraft
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *ReplicateReply) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowTraft
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: ReplicateReply: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ReplicateReply: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
 		default:
 			iNdEx = preIndex
 			skippy, err := skipTraft(dAtA[iNdEx:])
@@ -4161,6 +4350,284 @@ func (m *VoteReply) Unmarshal(dAtA []byte) error {
 			}
 			m.Logs = append(m.Logs, &Record{})
 			if err := m.Logs[len(m.Logs)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTraft(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTraft
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ReplicateReq) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTraft
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ReplicateReq: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ReplicateReq: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Committer", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTraft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTraft
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTraft
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Committer == nil {
+				m.Committer = &LeaderId{}
+			}
+			if err := m.Committer.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Logs", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTraft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTraft
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTraft
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Logs = append(m.Logs, &Record{})
+			if err := m.Logs[len(m.Logs)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTraft(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTraft
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ReplicateReply) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTraft
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ReplicateReply: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ReplicateReply: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field VotedFor", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTraft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTraft
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTraft
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.VotedFor == nil {
+				m.VotedFor = &LeaderId{}
+			}
+			if err := m.VotedFor.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Accepted", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTraft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTraft
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTraft
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Accepted == nil {
+				m.Accepted = &TailBitmap{}
+			}
+			if err := m.Accepted.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Committed", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTraft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTraft
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTraft
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Committed == nil {
+				m.Committed = &TailBitmap{}
+			}
+			if err := m.Committed.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

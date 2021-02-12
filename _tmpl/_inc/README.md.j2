@@ -3,6 +3,32 @@
 都说deadline 是第一生产力. 放假没事, 试试看能不能7天写个raft出来, 当练手了. 2021-02-09
 装逼有风险, 万一写不出来也别笑话我.
 
+7天内直播: https://live.bilibili.com/22732677?visit_id=6eoy1n42a1w0
+
+# Planned improvement to original raft
+
+-   Leader election with less conflict.
+    Raft has the issue that in a term, if multiple candidates try to elect theirselves,
+    the conflicts are unacceptable.
+    Because in one term, A voter will only vote for at most one leader.
+
+    In our impl, `term` is less strict:
+    A voter is allowed to vote another GREATER leader.
+
+-   Out of order commit out of order apply.
+
+    We use a bitmap to describe what logs interfere each other.
+
+    
+-   Adopt a more generalized member change algo.
+
+    Get rid of single-step member change.
+    Because any of the CORRECT single-step member change algo is equivalent to joint-consensus.
+
+    But joint-consensus is a specialization of the TODO (I dont have good name for it yet).
+
+
+
 # Features:
 
 - [ ] Leader election
@@ -11,6 +37,12 @@
 - [ ] member change with generalized joint consensus.
 - [ ] Out of order commit/apply if possible.
 
+
+{% include "docs/log.txt" %}
+
+
+
+<!--
 # Day-0 2021-02-09
 
 - [x] TailBitmap to support for describing log dependency etc. see: https://github.com/openacid/low/blob/ci/bitmap/tailbitmap.go
@@ -30,3 +62,4 @@
 - [x]: test handle_vote
 - [ ]: impl log replication
 - [ ]: impl traft main-loop
+-->
