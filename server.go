@@ -17,9 +17,9 @@ type TRaft struct {
 // init a TRaft for test, all logs are `set x=lsn`
 func (tr *TRaft) initLog(
 	// proposer of the logs
-	from *LeaderId,
-	// creator of the logs
-	creator *LeaderId,
+	committer *LeaderId,
+	// author of the logs
+	author *LeaderId,
 	// log seq numbers to generate.
 	accepted []int64,
 	votedFor *LeaderId,
@@ -30,12 +30,12 @@ func (tr *TRaft) initLog(
 	tr.Log = make([]*Record, 0)
 	for _, lsn := range accepted {
 		tr.Log = append(tr.Log,
-			NewRecord(creator.Clone(),
+			NewRecord(author.Clone(),
 				lsn,
 				NewCmdI64("set", "x", lsn)))
 	}
 
-	tr.Status[id].Committer = from.Clone()
+	tr.Status[id].Committer = committer.Clone()
 	tr.Status[id].Accepted = NewTailBitmap(0, accepted...)
 
 	tr.Status[id].VotedFor = votedFor.Clone()
@@ -43,7 +43,6 @@ func (tr *TRaft) initLog(
 
 func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 
-	candidate := req.Status
 	me := tr.Status[tr.Id]
 
 	// A vote reply just send back a voter's status.
@@ -56,7 +55,7 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 		},
 	}
 
-	if candidate.CmpAccepted(me) < 0 {
+	if CmpLogStatus(req, me) < 0 {
 		// I have more logs than the candidate.
 		// It cant be a leader.
 		return repl, nil
@@ -64,7 +63,7 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 
 	// candidate has the upto date logs.
 
-	r := candidate.VotedFor.Cmp(me.VotedFor)
+	r := req.Candidate.Cmp(me.VotedFor)
 	if r < 0 {
 		// I've voted for other leader with higher privilege.
 		// This candidate could not be a legal leader.
@@ -73,8 +72,8 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 	}
 
 	// grant vote
-	me.VotedFor = candidate.VotedFor.Clone()
-	repl.VoterStatus.VotedFor = candidate.VotedFor.Clone()
+	me.VotedFor = req.Candidate.Clone()
+	repl.VoterStatus.VotedFor = req.Candidate.Clone()
 
 	// send back the logs I have but the candidate does not.
 
@@ -83,7 +82,7 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 	start := me.Accepted.Offset
 	end := me.Accepted.Len()
 	for i := start; i < end; i++ {
-		if me.Accepted.Get(i) != 0 && candidate.Accepted.Get(i) == 0 {
+		if me.Accepted.Get(i) != 0 && req.Accepted.Get(i) == 0 {
 			logs = append(logs, tr.Log[i-tr.LogOffset])
 		}
 	}

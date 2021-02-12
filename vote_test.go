@@ -1,7 +1,8 @@
 package traft
 
 import (
-	context "context"
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,12 +11,11 @@ import (
 func TestTRaft_Vote(t *testing.T) {
 
 	ta := require.New(t)
-	// TODO
-	_ = ta
 
 	ids := []int64{1, 2, 3}
 
 	servers, trafts := serveCluster(ids)
+	id := int64(1)
 
 	defer func() {
 		for _, s := range servers {
@@ -23,58 +23,146 @@ func TestTRaft_Vote(t *testing.T) {
 		}
 	}()
 
-	{
-		// the first node:
-		//           13
-		//
-		//   6₀₃₋₅₁
-		//   5₀₃₋₅₁  5₁₃₋??
-		//   --- --- ---
-		//   t1      c
-		id := int64(1)
+	type candStat struct {
+		candidateId *LeaderId
+		committer   *LeaderId
+		logs        []int64
+	}
+
+	type voterStat struct {
+		votedFor  *LeaderId
+		committer *LeaderId
+		author    *LeaderId
+		logs      []int64
+	}
+
+	type wantStat struct {
+		votedFor     *LeaderId
+		committer    *LeaderId
+		allLogBitmap *TailBitmap
+		logs         string
+	}
+
+	testVote := func(
+		cand candStat,
+		voter voterStat,
+		want wantStat,
+	) *VoteReply {
+
 		t1 := trafts[0]
 
-		candidate := NewLeaderId(1, 3)
-
 		t1.initLog(
-			NewLeaderId(0, 3),
-			NewLeaderId(5, id),
-			[]int64{5, 6},
-			NewLeaderId(0, 2),
+			voter.committer, voter.author, voter.logs,
+			voter.votedFor,
 		)
-		r6 := t1.Log[1]
 
 		req := &VoteReq{
-			Status: &ReplicaStatus{
-				VotedFor: candidate,
-				// the candidate has latest log from leader (1, 3)
-				Committer: NewLeaderId(1, 3),
-				// candidate has log [0, 6)
-				Accepted: NewTailBitmap(0, 5),
-			},
+			Candidate: cand.candidateId,
+			Committer: cand.committer,
+			Accepted:  NewTailBitmap(0, cand.logs...),
 		}
 
+		var reply *VoteReply
 		addr := t1.Config.GetReplicaInfo(id).Addr
+
 		rpcTo(addr, func(cli TRaftClient, ctx context.Context) {
 
-			reply, err := cli.Vote(ctx, req)
+			var err error
+			reply, err = cli.Vote(ctx, req)
 			if err != nil {
 				panic("wtf")
 			}
-
-			ta.Equal(
-				&VoteReply{
-					VoterStatus: &ReplicaStatus{
-						VotedFor:  NewLeaderId(1, 3),
-						Committer: NewLeaderId(0, 3),
-						Accepted:  NewTailBitmap(0, 5, 6),
-					},
-					Logs: []*Record{
-						r6,
-					},
-				}, reply)
-
 		})
+
+		return reply
 	}
 
+	lid := NewLeaderId
+
+	cases := []struct {
+		cand  candStat
+		voter voterStat
+		want  wantStat
+	}{
+		// vote granted
+		{
+			candStat{candidateId: lid(2, 2), committer: lid(1, id), logs: []int64{5}},
+			voterStat{votedFor: lid(0, id), committer: lid(0, id), author: lid(1, id), logs: []int64{5, 6}},
+			wantStat{
+				votedFor:     lid(2, 2),
+				committer:    lid(0, id),
+				allLogBitmap: NewTailBitmap(0, 5, 6),
+				logs:         "[<001#001:006{set(x, 6)}>]",
+			},
+		},
+
+		// candidate has no upto date logs
+		{
+			candStat{candidateId: lid(2, 2), committer: lid(0, id), logs: []int64{5, 6}},
+			voterStat{votedFor: lid(0, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
+			wantStat{
+				votedFor:     lid(0, id),
+				committer:    lid(1, id),
+				allLogBitmap: NewTailBitmap(0, 5, 6),
+				logs:         "[]",
+			},
+		},
+
+		// candidate has not enough logs
+		// No log is sent back to candidate because it does not need to rebuild
+		// full log history.
+		{
+			candStat{candidateId: lid(2, 2), committer: lid(1, id), logs: []int64{5}},
+			voterStat{votedFor: lid(0, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
+			wantStat{
+				votedFor:     lid(0, id),
+				committer:    lid(1, id),
+				allLogBitmap: NewTailBitmap(0, 5, 6),
+				logs:         "[]",
+			},
+		},
+
+		// candidate has smaller term.
+		// No log sent back.
+		{
+			candStat{candidateId: lid(2, 2), committer: lid(1, id), logs: []int64{5, 6}},
+			voterStat{votedFor: lid(3, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
+			wantStat{
+				votedFor:     lid(3, id),
+				committer:    lid(1, id),
+				allLogBitmap: NewTailBitmap(0, 5, 6),
+				logs:         "[]",
+			},
+		},
+
+		// candidate has smaller id.
+		// No log sent back.
+		{
+			candStat{candidateId: lid(3, id-1), committer: lid(1, id), logs: []int64{5, 6}},
+			voterStat{votedFor: lid(3, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
+			wantStat{
+				votedFor:     lid(3, id),
+				committer:    lid(1, id),
+				allLogBitmap: NewTailBitmap(0, 5, 6),
+				logs:         "[]",
+			},
+		},
+	}
+
+	for i, c := range cases {
+		reply := testVote(c.cand, c.voter, c.want)
+
+		fmt.Println(reply.String())
+		fmt.Println(RecordsShortStr(reply.Logs))
+
+		ta.Equal(
+			c.want,
+			wantStat{
+				votedFor:     reply.VoterStatus.VotedFor,
+				committer:    reply.VoterStatus.Committer,
+				allLogBitmap: reply.VoterStatus.Accepted,
+				logs:         RecordsShortStr(reply.Logs),
+			},
+			"%d-th: case: %+v", i+1, c)
+	}
 }

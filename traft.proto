@@ -8,7 +8,8 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 // option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.equal_all) = true;
-option (gogoproto.goproto_getters_all) = false;
+// option (gogoproto.goproto_stringer_all) = true;
+// option (gogoproto.goproto_getters_all) = false;
 
 //
 // Unexchangeble logs: r1 and r3. They both modify the same key `x`.
@@ -182,7 +183,17 @@ message ClusterConfig {
 }
 
 message VoteReq {
-    ReplicaStatus Status = 1;
+    // who initiates the election
+    LeaderId Candidate = 1;
+
+
+    // candidate local log status:
+
+    // Latest leader that forwarded log to the candidate
+    LeaderId Committer = 2;
+
+    // what logs the candidate has.
+    TailBitmap Accepted = 3;
 }
 
 message VoteReply {

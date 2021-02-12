@@ -13,13 +13,22 @@ func newStatusAcc(aterm, aid, lsn int64) *ReplicaStatus {
 	}
 }
 
-// CmpAccepted compares log related fields with another ballot.
-// I.e. Committer and MaxLogSeq.
-func (a *ReplicaStatus) CmpAccepted(b *ReplicaStatus) int {
-	r := a.Committer.Cmp(b.Committer)
+type logStat interface {
+	GetCommitter() *LeaderId
+	GetAccepted() *TailBitmap
+}
+
+func CmpLogStatus(a, b logStat) int {
+	r := a.GetCommitter().Cmp(b.GetCommitter())
 	if r != 0 {
 		return r
 	}
 
-	return cmpI64(a.Accepted.Len(), b.Accepted.Len())
+	return cmpI64(a.GetAccepted().Len(), b.GetAccepted().Len())
+}
+
+// CmpAccepted compares log related fields with another ballot.
+// I.e. Committer and MaxLogSeq.
+func (a *ReplicaStatus) CmpAccepted(b *ReplicaStatus) int {
+	return CmpLogStatus(a, b)
 }

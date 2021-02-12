@@ -1,6 +1,10 @@
 package traft
 
-import proto "github.com/gogo/protobuf/proto"
+import (
+	fmt "fmt"
+
+	proto "github.com/gogo/protobuf/proto"
+)
 
 func NewLeaderId(term, id int64) *LeaderId {
 	return &LeaderId{
@@ -32,4 +36,8 @@ func (a *LeaderId) Cmp(b *LeaderId) int {
 
 func (l *LeaderId) Clone() *LeaderId {
 	return proto.Clone(l).(*LeaderId)
+}
+
+func (l *LeaderId) ShortStr() string {
+	return fmt.Sprintf("%03d#%03d", l.Term, l.Id)
 }
