@@ -221,6 +221,14 @@ func (m *Cmd) GetVStr() string
 func (m *Cmd) GetValue() isCmd_Value
 ```
 
+#### func (*Cmd) Interfering
+
+```go
+func (a *Cmd) Interfering(b *Cmd) bool
+```
+Interfering check if a command interferes with another one, i.e. they change the
+same key.
+
 #### func (*Cmd) Marshal
 
 ```go
@@ -557,7 +565,7 @@ type Node struct {
 	Config *ClusterConfig `protobuf:"bytes,1,opt,name=Config,proto3" json:"Config,omitempty"`
 	// From which log seq number we keeps here.
 	LogOffset int64     `protobuf:"varint,4,opt,name=LogOffset,proto3" json:"LogOffset,omitempty"`
-	Log       []*Record `protobuf:"bytes,2,rep,name=Log,proto3" json:"Log,omitempty"`
+	Logs      []*Record `protobuf:"bytes,2,rep,name=Logs,proto3" json:"Logs,omitempty"`
 	// local view of every replica, including this node too.
 	Status map[int64]*ReplicaStatus `protobuf:"bytes,6,rep,name=Status,proto3" json:"Status,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
@@ -594,16 +602,16 @@ func (m *Node) GetConfig() *ClusterConfig
 func (m *Node) GetId() int64
 ```
 
-#### func (*Node) GetLog
-
-```go
-func (m *Node) GetLog() []*Record
-```
-
 #### func (*Node) GetLogOffset
 
 ```go
 func (m *Node) GetLogOffset() int64
+```
+
+#### func (*Node) GetLogs
+
+```go
+func (m *Node) GetLogs() []*Record
 ```
 
 #### func (*Node) GetStatus
@@ -765,6 +773,12 @@ func (m *Record) GetOverrides() *TailBitmap
 
 ```go
 func (m *Record) GetSeq() int64
+```
+
+#### func (*Record) Interfering
+
+```go
+func (a *Record) Interfering(b *Record) bool
 ```
 
 #### func (*Record) Marshal
@@ -1370,6 +1384,12 @@ type TRaft struct {
 }
 ```
 
+
+#### func (*TRaft) AddLog
+
+```go
+func (tr *TRaft) AddLog(cmd *Cmd) *Record
+```
 
 #### func (*TRaft) Replicate
 

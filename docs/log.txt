@@ -26,3 +26,9 @@
 - day-3: add readme to record progress
 - day-3: readme: impl storage with slim
 - day-3: test that voter send back nil log
+- day-3: update readme: collect git log
+- day-3: TailBitmap: accept second operand to be nil
+- day-3: test Replicate, under dev
+- day-3: rename Node.Log to Node.Logs
+- day-3: add Cmd.Intefering() to check if two commands not be allowed to change execution order
+- day-3: add Record.Interfering()
