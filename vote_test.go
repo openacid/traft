@@ -8,52 +8,69 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type candStat struct {
+	candidateId *LeaderId
+	committer   *LeaderId
+	logs        []int64
+}
+
+type voterStat struct {
+	votedFor  *LeaderId
+	committer *LeaderId
+	author    *LeaderId
+	logs      []int64
+	nilLogs   map[int64]bool
+	committed []int64
+}
+
+type wantVoteReply struct {
+	votedFor     *LeaderId
+	committer    *LeaderId
+	allLogBitmap *TailBitmap
+	logs         string
+}
+
+type replicateReqStat struct {
+	committer *LeaderId
+	logs      []int64
+	nilLogs   map[int64]bool
+}
+
+type wantReplicateReply struct {
+	votedFor  *LeaderId
+	accepted  *TailBitmap
+	committed *TailBitmap
+}
+
+type wantVoterStat struct {
+	votedFor *LeaderId
+	accepted *TailBitmap
+	logs     string
+}
+
 func TestTRaft_Vote(t *testing.T) {
 
 	ta := require.New(t)
 
 	ids := []int64{1, 2, 3}
-
-	servers, trafts := serveCluster(ids)
 	id := int64(1)
 
+	servers, trafts := serveCluster(ids)
 	defer func() {
 		for _, s := range servers {
 			s.Stop()
 		}
 	}()
 
-	type candStat struct {
-		candidateId *LeaderId
-		committer   *LeaderId
-		logs        []int64
-	}
-
-	type voterStat struct {
-		votedFor  *LeaderId
-		committer *LeaderId
-		author    *LeaderId
-		logs      []int64
-		nilLogs   map[int64]bool
-	}
-
-	type wantStat struct {
-		votedFor     *LeaderId
-		committer    *LeaderId
-		allLogBitmap *TailBitmap
-		logs         string
-	}
+	t1 := trafts[0]
 
 	testVote := func(
 		cand candStat,
 		voter voterStat,
-		want wantStat,
 	) *VoteReply {
 
-		t1 := trafts[0]
-
 		t1.initLog(
-			voter.committer, voter.author, voter.logs, voter.nilLogs,
+			voter.committer, voter.author, voter.logs, voter.nilLogs, nil,
 			voter.votedFor,
 		)
 
@@ -67,7 +84,6 @@ func TestTRaft_Vote(t *testing.T) {
 		addr := t1.Config.GetReplicaInfo(id).Addr
 
 		rpcTo(addr, func(cli TRaftClient, ctx context.Context) {
-
 			var err error
 			reply, err = cli.Vote(ctx, req)
 			if err != nil {
@@ -83,13 +99,13 @@ func TestTRaft_Vote(t *testing.T) {
 	cases := []struct {
 		cand  candStat
 		voter voterStat
-		want  wantStat
+		want  wantVoteReply
 	}{
 		// vote granted
 		{
 			candStat{candidateId: lid(2, 2), committer: lid(1, id), logs: []int64{5}},
 			voterStat{votedFor: lid(0, id), committer: lid(0, id), author: lid(1, id), logs: []int64{5, 6}},
-			wantStat{
+			wantVoteReply{
 				votedFor:     lid(2, 2),
 				committer:    lid(0, id),
 				allLogBitmap: NewTailBitmap(0, 5, 6),
@@ -102,7 +118,7 @@ func TestTRaft_Vote(t *testing.T) {
 		{
 			candStat{candidateId: lid(2, 2), committer: lid(1, id), logs: []int64{5}},
 			voterStat{votedFor: lid(0, id), committer: lid(0, id), author: lid(1, id), logs: []int64{5, 6, 7}, nilLogs: map[int64]bool{6: true}},
-			wantStat{
+			wantVoteReply{
 				votedFor:     lid(2, 2),
 				committer:    lid(0, id),
 				allLogBitmap: NewTailBitmap(0, 5, 6, 7),
@@ -114,7 +130,7 @@ func TestTRaft_Vote(t *testing.T) {
 		{
 			candStat{candidateId: lid(2, 2), committer: lid(0, id), logs: []int64{5, 6}},
 			voterStat{votedFor: lid(0, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
-			wantStat{
+			wantVoteReply{
 				votedFor:     lid(0, id),
 				committer:    lid(1, id),
 				allLogBitmap: NewTailBitmap(0, 5, 6),
@@ -128,7 +144,7 @@ func TestTRaft_Vote(t *testing.T) {
 		{
 			candStat{candidateId: lid(2, 2), committer: lid(1, id), logs: []int64{5}},
 			voterStat{votedFor: lid(0, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
-			wantStat{
+			wantVoteReply{
 				votedFor:     lid(0, id),
 				committer:    lid(1, id),
 				allLogBitmap: NewTailBitmap(0, 5, 6),
@@ -141,7 +157,7 @@ func TestTRaft_Vote(t *testing.T) {
 		{
 			candStat{candidateId: lid(2, 2), committer: lid(1, id), logs: []int64{5, 6}},
 			voterStat{votedFor: lid(3, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
-			wantStat{
+			wantVoteReply{
 				votedFor:     lid(3, id),
 				committer:    lid(1, id),
 				allLogBitmap: NewTailBitmap(0, 5, 6),
@@ -154,7 +170,7 @@ func TestTRaft_Vote(t *testing.T) {
 		{
 			candStat{candidateId: lid(3, id-1), committer: lid(1, id), logs: []int64{5, 6}},
 			voterStat{votedFor: lid(3, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
-			wantStat{
+			wantVoteReply{
 				votedFor:     lid(3, id),
 				committer:    lid(1, id),
 				allLogBitmap: NewTailBitmap(0, 5, 6),
@@ -164,19 +180,117 @@ func TestTRaft_Vote(t *testing.T) {
 	}
 
 	for i, c := range cases {
-		reply := testVote(c.cand, c.voter, c.want)
+		reply := testVote(c.cand, c.voter)
 
 		fmt.Println(reply.String())
 		fmt.Println(RecordsShortStr(reply.Logs))
 
 		ta.Equal(
 			c.want,
-			wantStat{
+			wantVoteReply{
 				votedFor:     reply.VotedFor,
 				committer:    reply.Committer,
 				allLogBitmap: reply.Accepted,
 				logs:         RecordsShortStr(reply.Logs),
 			},
 			"%d-th: case: %+v", i+1, c)
+	}
+}
+
+func TestTRaft_Replicate(t *testing.T) {
+
+	ta := require.New(t)
+
+	ids := []int64{1, 2, 3}
+	id := int64(1)
+
+	servers, trafts := serveCluster(ids)
+	defer func() {
+		for _, s := range servers {
+			s.Stop()
+		}
+	}()
+
+	t1 := trafts[0]
+	me := t1.Status[id]
+
+	testReplicate := func(
+		rreq replicateReqStat,
+		voter voterStat,
+	) *ReplicateReply {
+
+		t1.initLog(
+			voter.committer, voter.author, voter.logs, voter.nilLogs, voter.committed,
+			voter.votedFor,
+		)
+
+		_, logs := initLog2(rreq.committer, rreq.logs, rreq.nilLogs)
+		req := &ReplicateReq{
+			Committer: rreq.committer,
+			Logs:      logs,
+		}
+
+		var reply *ReplicateReply
+		addr := t1.Config.GetReplicaInfo(id).Addr
+
+		rpcTo(addr, func(cli TRaftClient, ctx context.Context) {
+			var err error
+			reply, err = cli.Replicate(ctx, req)
+			if err != nil {
+				panic("wtf")
+			}
+		})
+
+		return reply
+	}
+
+	lid := NewLeaderId
+	_ = lid
+
+	cases := []struct {
+		cand      replicateReqStat
+		voter     voterStat
+		want      wantReplicateReply
+		wantVoter wantVoterStat
+	}{
+		//
+		// {
+		//     replicateReqStat{committer: lid(1, id), logs: []int64{5}},
+		//     voterStat{votedFor: lid(1, id), committer: lid(1, id), author: lid(1, id), logs: []int64{}},
+		//     wantReplicateReply{
+		//         votedFor:  lid(1, id),
+		//         accepted:  NewTailBitmap(0, 5),
+		//         committed: NewTailBitmap(0),
+		//     },
+		//     wantVoterStat{
+		//         votedFor: lid(1, id),
+		//         accepted: NewTailBitmap(0, 5),
+		//         logs:     "",
+		//     },
+		// },
+	}
+
+	for i, c := range cases {
+		reply := testReplicate(c.cand, c.voter)
+
+		fmt.Println(reply.String())
+
+		ta.Equal(
+			c.want,
+			wantReplicateReply{
+				votedFor:  reply.VotedFor,
+				accepted:  reply.Accepted,
+				committed: reply.Committed,
+			},
+			"%d-th: reply: case: %+v", i+1, c)
+
+		ta.Equal(
+			c.want,
+			wantVoterStat{
+				votedFor: me.VotedFor,
+				accepted: me.Accepted,
+				logs:     RecordsShortStr(t1.Log),
+			},
+			"%d-th: voter: case: %+v", i+1, c)
 	}
 }
