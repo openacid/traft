@@ -102,6 +102,10 @@ func (tb *TailBitmap) Clone() *TailBitmap {
 
 func (tb *TailBitmap) Union(tc *TailBitmap) {
 
+	if tc == nil {
+		return
+	}
+
 	lb := tb.Offset + int64(len(tb.Words)*64)
 	lc := tc.Offset + int64(len(tc.Words)*64)
 
@@ -147,6 +151,10 @@ func (tb *TailBitmap) Union(tc *TailBitmap) {
 
 // Diff AKA substraction A - B or  A \ B
 func (tb *TailBitmap) Diff(tc *TailBitmap) {
+
+	if tc == nil {
+		return
+	}
 
 	lb := tb.Offset + int64(len(tb.Words)*64)
 	lc := tc.Offset + int64(len(tc.Words)*64)

@@ -368,6 +368,14 @@ func TestTailBitmap_Union(t *testing.T) {
 		want  *TailBitmap
 	}{
 		// 1111 xxxx
+		// nil
+		{
+			input: &TailBitmap{Offset: 64, Words: []uint64{1}, Reclamed: 0},
+			other: nil,
+			want:  &TailBitmap{Offset: 64, Words: []uint64{1}, Reclamed: 0},
+		},
+
+		// 1111 xxxx
 		// 1111 yyyy
 		{
 			input: &TailBitmap{Offset: 64, Words: []uint64{1}, Reclamed: 0},
@@ -436,6 +444,14 @@ func TestTailBitmap_Diff(t *testing.T) {
 		other *TailBitmap
 		want  *TailBitmap
 	}{
+		// 1111 xxxx
+		// nil
+		{
+			input: &TailBitmap{Offset: 64 * 1, Words: []uint64{1}, Reclamed: 0},
+			other: nil,
+			want:  &TailBitmap{Offset: 64 * 1, Words: []uint64{1}, Reclamed: 0},
+		},
+
 		// 1111 xxxx
 		// 1111 1111 1111 yyyy
 		{
