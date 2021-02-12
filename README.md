@@ -20,7 +20,7 @@
 
 - [ ] Leader election
 - [ ] WAL log
-- [ ] snapshot
+- [ ] snapshot: impl with https://github.com/openacid/slim , a static kv-like storage engine supporting protobuf.
 - [ ] member change with generalized joint consensus.
 - [ ] Out of order commit/apply if possible.
 
@@ -41,4 +41,5 @@
 
 - [x]: refactor concepts
 - [x]: test handle_vote
+- [ ]: impl log replication
 - [ ]: impl traft main-loop

@@ -18,6 +18,10 @@ func NewRecord(leader *LeaderId, seq int64, cmd *Cmd) *Record {
 }
 
 func (r *Record) ShortStr() string {
+	if r == nil {
+		return "<>"
+	}
+
 	return fmt.Sprintf("<%s:%03d{%s}>",
 		r.Author.ShortStr(),
 		r.Seq,
