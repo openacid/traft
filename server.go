@@ -48,11 +48,9 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 	// A vote reply just send back a voter's status.
 	// It is the candidate's responsibility to check if a voter granted it.
 	repl := &VoteReply{
-		VoterStatus: &ReplicaStatus{
-			VotedFor:  me.VotedFor.Clone(),
-			Committer: me.Committer.Clone(),
-			Accepted:  me.Accepted.Clone(),
-		},
+		VotedFor:  me.VotedFor.Clone(),
+		Committer: me.Committer.Clone(),
+		Accepted:  me.Accepted.Clone(),
 	}
 
 	if CmpLogStatus(req, me) < 0 {
@@ -73,7 +71,7 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 
 	// grant vote
 	me.VotedFor = req.Candidate.Clone()
-	repl.VoterStatus.VotedFor = req.Candidate.Clone()
+	repl.VotedFor = req.Candidate.Clone()
 
 	// send back the logs I have but the candidate does not.
 

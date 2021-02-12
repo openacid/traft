@@ -158,9 +158,9 @@ func TestTRaft_Vote(t *testing.T) {
 		ta.Equal(
 			c.want,
 			wantStat{
-				votedFor:     reply.VoterStatus.VotedFor,
-				committer:    reply.VoterStatus.Committer,
-				allLogBitmap: reply.VoterStatus.Accepted,
+				votedFor:     reply.VotedFor,
+				committer:    reply.Committer,
+				allLogBitmap: reply.Accepted,
 				logs:         RecordsShortStr(reply.Logs),
 			},
 			"%d-th: case: %+v", i+1, c)

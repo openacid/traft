@@ -208,7 +208,14 @@ message VoteReply {
     // If a voter seen a bigger accepted term than its own.
     // that means its logs are not committed.
 
-    ReplicaStatus VoterStatus = 1;
+    // voted for a candidate or the previous voted other leader.
+    LeaderId VotedFor = 10;
+
+    // latest log committer.
+    LeaderId Committer = 4;
+
+    // what logs I have.
+    TailBitmap Accepted = 1;
 
     // The logs that voter has but leader candidate does not have.
     // For the leader to rebuild all possibly committed logs from a quorum.
