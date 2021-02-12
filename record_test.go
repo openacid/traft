@@ -11,8 +11,8 @@ func TestNewRecord(t *testing.T) {
 	ta := require.New(t)
 
 	ta.Equal(&Record{
-		By:  &LeaderId{1, 2},
-		Seq: 3,
+		Author: &LeaderId{1, 2},
+		Seq:    3,
 		Cmd: &Cmd{
 			Op:    "foo",
 			Key:   "key",

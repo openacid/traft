@@ -10,8 +10,8 @@ package traft
 
 //     ta.Equal(int64(5), got.MaxLogSeq)
 
-//     ta.Equal(int64(3), got.AcceptedFrom.Term)
-//     ta.Equal(int64(4), got.AcceptedFrom.Id)
+//     ta.Equal(int64(3), got.Committer.Term)
+//     ta.Equal(int64(4), got.Committer.Id)
 // }
 
 // func TestBallog_CmpLog(t *testing.T) {

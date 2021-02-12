@@ -12,8 +12,8 @@ func Test_newStatusAcc(t *testing.T) {
 
 	got := newStatusAcc(3, 4, 5)
 
-	ta.Equal(int64(3), got.AcceptedFrom.Term)
-	ta.Equal(int64(4), got.AcceptedFrom.Id)
+	ta.Equal(int64(3), got.Committer.Term)
+	ta.Equal(int64(4), got.Committer.Id)
 
 	ta.Equal(int64(6), got.Accepted.Len())
 }

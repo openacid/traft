@@ -4,14 +4,14 @@ package traft
 //     return &Ballot{
 //         Current:      NewLeaderId(cterm, cid),
 //         MaxLogSeq:    lsn,
-//         AcceptedFrom: NewLeaderId(aterm, aid),
+//         Committer: NewLeaderId(aterm, aid),
 //     }
 // }
 
 // // CmpLog compares log related fields with another ballot.
-// // I.e. AcceptedFrom and MaxLogSeq.
+// // I.e. Committer and MaxLogSeq.
 // func (a *Ballot) CmpLog(b *Ballot) int {
-//     r := a.AcceptedFrom.Cmp(b.AcceptedFrom)
+//     r := a.Committer.Cmp(b.Committer)
 //     if r != 0 {
 //         return r
 //     }

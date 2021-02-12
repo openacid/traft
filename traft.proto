@@ -8,6 +8,7 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 // option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.equal_all) = true;
+option (gogoproto.goproto_getters_all) = false;
 
 //
 // Unexchangeble logs: r1 and r3. They both modify the same key `x`.
@@ -74,7 +75,9 @@ message TailBitmap {
 
 // Record is a log record
 message Record {
-    // Which leader proposed this log.
+    // Which leader initially proposed this log.
+    // Author may not be the same with Committer, if Author fails when trying to
+    // commit a log record.
     //
     // TODO It seems this field is useless. Because we already have `Accepted`.
     // This is different from the original raft:
@@ -82,7 +85,7 @@ message Record {
     // paxos.
     // Instead, The `commited` in raft is defined as: leader forwards its
     // own term log to a quorum.
-    LeaderId By = 1;
+    LeaderId Author = 1;
 
     // Log sequence number.
     int64 Seq = 10;
@@ -106,13 +109,13 @@ message LeaderId {
 
 
 // The replica that has the latest log is allow to be a new leader.
-// I.e., log is forwarded from latest leader(max AcceptedFrom), and has the highest
+// I.e., log is forwarded from latest leader(max Committer), and has the highest
 // log seq number.
 // Then a leader is chosen from these candidates by their Current leader id.
 // The max LeaderId wins.
 
 //message Ballot {
-//    LeaderId AcceptedFrom = 1;
+//    LeaderId Committer = 1;
 //    TailBitmap Accepted = 2;
 //
 //    LeaderId Current = 3;
@@ -151,10 +154,16 @@ message ReplicaStatus {
     // Accepted is nil.
     LeaderId VotedFor = 10;
 
-    // similar to the vrnd/vballot concept in paxos.
-    // the Ballot number a value is accepted at.
+    // The Leader tried to commit all of the local logs.
+    // The Committer is the same as Author if a log entry is committed by its
+    // Author.
     //
-    LeaderId AcceptedFrom = 4;
+    // If an Author fails and the log is finally committed by some other leader,
+    // Committer is a higher value than Author.
+    //
+    // It is similar to the vrnd/vballot concept in paxos.
+    // the Ballot number a value is accepted at.
+    LeaderId Committer = 4;
 
     // What logs has been accepted by this replica.
     TailBitmap Accepted = 1;

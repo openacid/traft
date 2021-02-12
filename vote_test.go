@@ -48,7 +48,7 @@ func TestTRaft_Vote(t *testing.T) {
 			Status: &ReplicaStatus{
 				VotedFor: candidate,
 				// the candidate has latest log from leader (1, 3)
-				AcceptedFrom: NewLeaderId(1, 3),
+				Committer: NewLeaderId(1, 3),
 				// candidate has log [0, 6)
 				Accepted: NewTailBitmap(0, 5),
 			},
@@ -65,9 +65,9 @@ func TestTRaft_Vote(t *testing.T) {
 			ta.Equal(
 				&VoteReply{
 					VoterStatus: &ReplicaStatus{
-						VotedFor:     NewLeaderId(1, 3),
-						AcceptedFrom: NewLeaderId(0, 3),
-						Accepted:     NewTailBitmap(0, 5, 6),
+						VotedFor:  NewLeaderId(1, 3),
+						Committer: NewLeaderId(0, 3),
+						Accepted:  NewTailBitmap(0, 5, 6),
 					},
 					Logs: []*Record{
 						r6,

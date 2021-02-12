@@ -43,10 +43,10 @@ func NewNode(id int64, idAddrs map[int64]string) *Node {
 func emptyProgress(id int64) *ReplicaStatus {
 	return &ReplicaStatus{
 		// initially it votes for itself with term 0
-		VotedFor:     NewLeaderId(0, id),
-		AcceptedFrom: nil,
-		Accepted:     NewTailBitmap(0),
-		Committed:    NewTailBitmap(0),
-		Applied:      NewTailBitmap(0),
+		VotedFor:  NewLeaderId(0, id),
+		Committer: nil,
+		Accepted:  NewTailBitmap(0),
+		Committed: NewTailBitmap(0),
+		Applied:   NewTailBitmap(0),
 	}
 }

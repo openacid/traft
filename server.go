@@ -35,7 +35,7 @@ func (tr *TRaft) initLog(
 				NewCmdI64("set", "x", lsn)))
 	}
 
-	tr.Status[id].AcceptedFrom = from.Clone()
+	tr.Status[id].Committer = from.Clone()
 	tr.Status[id].Accepted = NewTailBitmap(0, accepted...)
 
 	tr.Status[id].VotedFor = votedFor.Clone()
@@ -50,9 +50,9 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 	// It is the candidate's responsibility to check if a voter granted it.
 	repl := &VoteReply{
 		VoterStatus: &ReplicaStatus{
-			VotedFor:     me.VotedFor.Clone(),
-			AcceptedFrom: me.AcceptedFrom.Clone(),
-			Accepted:     me.Accepted.Clone(),
+			VotedFor:  me.VotedFor.Clone(),
+			Committer: me.Committer.Clone(),
+			Accepted:  me.Accepted.Clone(),
 		},
 	}
 

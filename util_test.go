@@ -39,11 +39,11 @@ func Test_serveCluster(t *testing.T) {
 			st := tr.Status[id]
 			ta.Equal(&ReplicaStatus{
 				// voted for ones self at first.
-				VotedFor:     &LeaderId{Term: 0, Id: id},
-				AcceptedFrom: nil,
-				Accepted:     NewTailBitmap(0),
-				Committed:    NewTailBitmap(0),
-				Applied:      NewTailBitmap(0),
+				VotedFor:  &LeaderId{Term: 0, Id: id},
+				Committer: nil,
+				Accepted:  NewTailBitmap(0),
+				Committed: NewTailBitmap(0),
+				Applied:   NewTailBitmap(0),
 			}, st)
 		}
 	}
