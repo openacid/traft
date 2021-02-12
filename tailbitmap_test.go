@@ -23,12 +23,22 @@ func TestNewTailBitmap(t *testing.T) {
 				Reclamed: 0,
 			},
 		},
+
+		// non-64 aligned offset
 		{
-			input: 999999,
+			input: 64 + 3,
 			want: &TailBitmap{
-				Offset:   999999,
+				Offset:   64,
+				Words:    []uint64{7},
+				Reclamed: 64,
+			},
+		},
+		{
+			input: 64 * 1025,
+			want: &TailBitmap{
+				Offset:   64 * 1025,
 				Words:    make([]uint64, 0, 1024),
-				Reclamed: 999999,
+				Reclamed: 64 * 1025,
 			},
 		},
 		// with extra bits to set
@@ -515,6 +525,8 @@ func TestTailBitmap_Len(t *testing.T) {
 		input *TailBitmap
 		want  int64
 	}{
+		{input: &TailBitmap{Offset: 0, Words: []uint64{}}, want: 0},
+		{input: &TailBitmap{Offset: 0, Words: []uint64{1}}, want: 1},
 		{input: &TailBitmap{Offset: 64 * 1, Words: []uint64{}}, want: 64 * 1},
 		{input: &TailBitmap{Offset: 64 * 1, Words: []uint64{1}}, want: 64*1 + 1},
 		{input: &TailBitmap{Offset: 64 * 2, Words: []uint64{2}}, want: 64*2 + 2},

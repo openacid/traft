@@ -18,10 +18,16 @@ var reclaimThreshold = int64(1024) * 64
 //
 // Since 0.1.22
 func NewTailBitmap(offset int64, set ...int64) *TailBitmap {
+	residual := offset & 63
 	tb := &TailBitmap{
-		Offset:   offset,
-		Reclamed: offset,
+		Offset:   offset & ^63,
+		Reclamed: offset & ^63,
 		Words:    make([]uint64, 0, reclaimThreshold>>6),
+	}
+	if residual != 0 {
+		for i := int64(0); i < residual; i++ {
+			tb.Set(tb.Offset + i)
+		}
 	}
 	for _, pos := range set {
 		tb.Set(pos)

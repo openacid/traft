@@ -5,6 +5,7 @@
 - [traft](#traft)
 - [Planned improvement to original raft](#planned-improvement-to-original-raft)
 - [Features:](#features)
+- [Progress](#progress)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -47,6 +48,7 @@
 - [ ] member change with generalized joint consensus.
 - [ ] Out of order commit/apply if possible.
 
+# Progress
 
 - day-1: buildMajorityQuorums()
 - day-1: import TailBitmap, add Union()
