@@ -23,6 +23,14 @@ func (r *Record) Empty() bool {
 	return r == nil || r.Cmd == nil
 }
 
+func (a *Record) Interfering(b *Record) bool {
+	if a == nil || b == nil {
+		return false
+	}
+
+	return a.Cmd.Interfering(b.Cmd)
+}
+
 func (r *Record) ShortStr() string {
 	if r.Empty() {
 		return "<>"
