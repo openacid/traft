@@ -127,7 +127,7 @@ message Node {
 
     // From which log seq number we keeps here.
     int64 LogOffset = 4;
-    repeated Record Log = 2;
+    repeated Record Logs = 2;
 
     // local view of every replica, including this node too.
     map<int64, ReplicaStatus> Status = 6;

@@ -69,7 +69,7 @@ func TestTRaft_Vote(t *testing.T) {
 		voter voterStat,
 	) *VoteReply {
 
-		t1.initLog(
+		t1.initTraft(
 			voter.committer, voter.author, voter.logs, voter.nilLogs, nil,
 			voter.votedFor,
 		)
@@ -219,12 +219,12 @@ func TestTRaft_Replicate(t *testing.T) {
 		voter voterStat,
 	) *ReplicateReply {
 
-		t1.initLog(
+		t1.initTraft(
 			voter.committer, voter.author, voter.logs, voter.nilLogs, voter.committed,
 			voter.votedFor,
 		)
 
-		_, logs := initLog2(rreq.committer, rreq.logs, rreq.nilLogs)
+		_, logs := buildPseudoLogs(rreq.committer, rreq.logs, rreq.nilLogs)
 		req := &ReplicateReq{
 			Committer: rreq.committer,
 			Logs:      logs,
@@ -289,7 +289,7 @@ func TestTRaft_Replicate(t *testing.T) {
 			wantVoterStat{
 				votedFor: me.VotedFor,
 				accepted: me.Accepted,
-				logs:     RecordsShortStr(t1.Log),
+				logs:     RecordsShortStr(t1.Logs),
 			},
 			"%d-th: voter: case: %+v", i+1, c)
 	}

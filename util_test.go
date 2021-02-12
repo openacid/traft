@@ -33,7 +33,7 @@ func Test_serveCluster(t *testing.T) {
 		}, tr.Config)
 
 		ta.Equal(int64(0), tr.LogOffset)
-		ta.Equal([]*Record{}, tr.Log)
+		ta.Equal([]*Record{}, tr.Logs)
 		ta.Equal(ids[i], tr.Id)
 		for _, id := range ids {
 			st := tr.Status[id]

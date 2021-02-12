@@ -34,7 +34,7 @@ func NewNode(id int64, idAddrs map[int64]string) *Node {
 
 	node := &Node{
 		Config: conf,
-		Log:    make([]*Record, 0),
+		Logs:   make([]*Record, 0),
 		Id:     id,
 		Status: progs,
 	}

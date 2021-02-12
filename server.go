@@ -16,23 +16,23 @@ type TRaft struct {
 }
 
 // init a TRaft for test, all logs are `set x=lsn`
-func (tr *TRaft) initLog(
+func (tr *TRaft) initTraft(
 	// proposer of the logs
 	committer *LeaderId,
 	// author of the logs
 	author *LeaderId,
 	// log seq numbers to generate.
-	accepted []int64,
+	lsns []int64,
 	nilLogs map[int64]bool,
 	committed []int64,
 	votedFor *LeaderId,
 ) {
 	id := tr.Id
 
-	tr.LogOffset, tr.Log = initLog2(author, accepted, nilLogs)
+	tr.LogOffset, tr.Logs = buildPseudoLogs(author, lsns, nilLogs)
 
 	tr.Status[id].Committer = committer.Clone()
-	tr.Status[id].Accepted = NewTailBitmap(0, accepted...)
+	tr.Status[id].Accepted = NewTailBitmap(0, lsns...)
 
 	if committed == nil {
 		tr.Status[id].Committed = NewTailBitmap(0)
@@ -43,25 +43,25 @@ func (tr *TRaft) initLog(
 	tr.Status[id].VotedFor = votedFor.Clone()
 }
 
-func initLog2(
+func buildPseudoLogs(
 	// author of the logs
 	author *LeaderId,
 	// log seq numbers to generate.
-	accepted []int64,
+	lsns []int64,
 	nilLogs map[int64]bool,
 ) (int64, []*Record) {
 	logs := make([]*Record, 0)
-	if len(accepted) == 0 {
+	if len(lsns) == 0 {
 		return 0, logs
 	}
 
-	last := accepted[len(accepted)-1]
-	start := accepted[0]
+	last := lsns[len(lsns)-1]
+	start := lsns[0]
 	for i := start; i <= last; i++ {
 		logs = append(logs, &Record{})
 	}
 
-	for _, lsn := range accepted {
+	for _, lsn := range lsns {
 		if nilLogs != nil && nilLogs[lsn] {
 		} else {
 			logs[lsn-start] = NewRecord(
@@ -71,6 +71,26 @@ func initLog2(
 		}
 	}
 	return start, logs
+}
+
+func (tr *TRaft) AddLog(cmd *Cmd) *Record {
+	me := tr.Status[tr.Id]
+
+	if me.VotedFor.Id != tr.Id {
+		panic("wtf")
+	}
+
+	lsn := tr.LogOffset + int64(len(tr.Logs))
+
+	r := NewRecord(me.VotedFor, lsn, cmd)
+
+	// find the first interfering record.
+	var i int
+	for i = len(tr.Logs) - 1; i >= 0; i-- {
+
+	}
+
+	return r
 }
 
 func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
@@ -113,8 +133,8 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 	end := me.Accepted.Len()
 	for i := start; i < end; i++ {
 		if me.Accepted.Get(i) != 0 && req.Accepted.Get(i) == 0 {
-			fmt.Println("append:", tr.Log[i-tr.LogOffset].ShortStr())
-			logs = append(logs, tr.Log[i-tr.LogOffset])
+			fmt.Println("append:", tr.Logs[i-tr.LogOffset].ShortStr())
+			logs = append(logs, tr.Logs[i-tr.LogOffset])
 		}
 	}
 
@@ -170,11 +190,11 @@ func (tr *TRaft) Replicate(ctx context.Context, req *ReplicateReq) (*ReplicateRe
 
 	for _, r := range req.Logs {
 		lsn := r.Seq
-		for lsn-tr.LogOffset >= int64(len(tr.Log)) {
+		for lsn-tr.LogOffset >= int64(len(tr.Logs)) {
 			// fill in the gap
-			tr.Log = append(tr.Log, &Record{})
+			tr.Logs = append(tr.Logs, &Record{})
 		}
-		tr.Log[lsn-tr.LogOffset] = r
+		tr.Logs[lsn-tr.LogOffset] = r
 
 		// If a record interferes and overrides a previous log,
 		// it then does not need the overrided log to be commit to commit this
