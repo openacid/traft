@@ -26,8 +26,9 @@ func cmdValueShortStr(v isCmd_Value) string {
 }
 
 func (c *Cmd) ShortStr() string {
-	// return c.String()
-	// return proto.CompactTextString(c.Value)
+	if c == nil {
+		return "()"
+	}
 	return fmt.Sprintf("%s(%s, %s)",
 		c.Op, c.Key, cmdValueShortStr(c.Value))
 }

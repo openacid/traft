@@ -4,6 +4,7 @@ package traft
 
 import (
 	context "context"
+	fmt "fmt"
 	sync "sync"
 	// "google.golang.org/protobuf/proto"
 )
@@ -22,6 +23,7 @@ func (tr *TRaft) initLog(
 	author *LeaderId,
 	// log seq numbers to generate.
 	accepted []int64,
+	nilLogs map[int64]bool,
 	votedFor *LeaderId,
 ) {
 	id := tr.Id
@@ -29,10 +31,14 @@ func (tr *TRaft) initLog(
 	tr.LogOffset = accepted[0]
 	tr.Log = make([]*Record, 0)
 	for _, lsn := range accepted {
-		tr.Log = append(tr.Log,
-			NewRecord(author.Clone(),
-				lsn,
-				NewCmdI64("set", "x", lsn)))
+		if nilLogs != nil && nilLogs[lsn] {
+			tr.Log = append(tr.Log, &Record{})
+		} else {
+			tr.Log = append(tr.Log,
+				NewRecord(author.Clone(),
+					lsn,
+					NewCmdI64("set", "x", lsn)))
+		}
 	}
 
 	tr.Status[id].Committer = committer.Clone()
@@ -81,6 +87,7 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 	end := me.Accepted.Len()
 	for i := start; i < end; i++ {
 		if me.Accepted.Get(i) != 0 && req.Accepted.Get(i) == 0 {
+			fmt.Println("append:", tr.Log[i-tr.LogOffset].ShortStr())
 			logs = append(logs, tr.Log[i-tr.LogOffset])
 		}
 	}

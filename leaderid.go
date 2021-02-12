@@ -39,5 +39,8 @@ func (l *LeaderId) Clone() *LeaderId {
 }
 
 func (l *LeaderId) ShortStr() string {
+	if l == nil {
+		return "000#000"
+	}
 	return fmt.Sprintf("%03d#%03d", l.Term, l.Id)
 }

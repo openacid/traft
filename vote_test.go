@@ -34,6 +34,7 @@ func TestTRaft_Vote(t *testing.T) {
 		committer *LeaderId
 		author    *LeaderId
 		logs      []int64
+		nilLogs   map[int64]bool
 	}
 
 	type wantStat struct {
@@ -52,7 +53,7 @@ func TestTRaft_Vote(t *testing.T) {
 		t1 := trafts[0]
 
 		t1.initLog(
-			voter.committer, voter.author, voter.logs,
+			voter.committer, voter.author, voter.logs, voter.nilLogs,
 			voter.votedFor,
 		)
 
@@ -93,6 +94,19 @@ func TestTRaft_Vote(t *testing.T) {
 				committer:    lid(0, id),
 				allLogBitmap: NewTailBitmap(0, 5, 6),
 				logs:         "[<001#001:006{set(x, 6)}>]",
+			},
+		},
+
+		// vote granted
+		// send back nil logs
+		{
+			candStat{candidateId: lid(2, 2), committer: lid(1, id), logs: []int64{5}},
+			voterStat{votedFor: lid(0, id), committer: lid(0, id), author: lid(1, id), logs: []int64{5, 6, 7}, nilLogs: map[int64]bool{6: true}},
+			wantStat{
+				votedFor:     lid(2, 2),
+				committer:    lid(0, id),
+				allLogBitmap: NewTailBitmap(0, 5, 6, 7),
+				logs:         "[<>, <001#001:007{set(x, 7)}>]",
 			},
 		},
 

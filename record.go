@@ -17,8 +17,14 @@ func NewRecord(leader *LeaderId, seq int64, cmd *Cmd) *Record {
 	return rec
 }
 
+// gogoproto would panic if a []*Record has a nil in it.
+// Thus we use r.Cmd == nil  to indicate an absent log record.
+func (r *Record) Empty() bool {
+	return r == nil || r.Cmd == nil
+}
+
 func (r *Record) ShortStr() string {
-	if r == nil {
+	if r.Empty() {
 		return "<>"
 	}
 
