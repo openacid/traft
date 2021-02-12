@@ -5,8 +5,6 @@ package traft
 import (
 	context "context"
 	sync "sync"
-
-	proto "github.com/gogo/protobuf/proto"
 	// "google.golang.org/protobuf/proto"
 )
 
@@ -14,6 +12,33 @@ type TRaft struct {
 	// TODO lock first
 	mu sync.Mutex
 	Node
+}
+
+// init a TRaft for test, all logs are `set x=lsn`
+func (tr *TRaft) initLog(
+	// proposer of the logs
+	from *LeaderId,
+	// creator of the logs
+	creator *LeaderId,
+	// log seq numbers to generate.
+	accepted []int64,
+	votedFor *LeaderId,
+) {
+	id := tr.Id
+
+	tr.LogOffset = accepted[0]
+	tr.Log = make([]*Record, 0)
+	for _, lsn := range accepted {
+		tr.Log = append(tr.Log,
+			NewRecord(creator.Clone(),
+				lsn,
+				NewCmdI64("set", "x", lsn)))
+	}
+
+	tr.Status[id].AcceptedFrom = from.Clone()
+	tr.Status[id].Accepted = NewTailBitmap(0, accepted...)
+
+	tr.Status[id].VotedFor = votedFor.Clone()
 }
 
 func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
@@ -25,9 +50,9 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 	// It is the candidate's responsibility to check if a voter granted it.
 	repl := &VoteReply{
 		VoterStatus: &ReplicaStatus{
-			VotedFor:     proto.Clone(me.VotedFor).(*LeaderId),
-			AcceptedFrom: proto.Clone(me.AcceptedFrom).(*LeaderId),
-			Accepted:     proto.Clone(me.Accepted).(*TailBitmap),
+			VotedFor:     me.VotedFor.Clone(),
+			AcceptedFrom: me.AcceptedFrom.Clone(),
+			Accepted:     me.Accepted.Clone(),
 		},
 	}
 
@@ -48,8 +73,8 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 	}
 
 	// grant vote
-	me.VotedFor = proto.Clone(candidate.VotedFor).(*LeaderId)
-	repl.VoterStatus.VotedFor = proto.Clone(candidate.VotedFor).(*LeaderId)
+	me.VotedFor = candidate.VotedFor.Clone()
+	repl.VoterStatus.VotedFor = candidate.VotedFor.Clone()
 
 	// send back the logs I have but the candidate does not.
 
@@ -59,7 +84,6 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 	end := me.Accepted.Len()
 	for i := start; i < end; i++ {
 		if me.Accepted.Get(i) != 0 && candidate.Accepted.Get(i) == 0 {
-
 			logs = append(logs, tr.Log[i-tr.LogOffset])
 		}
 	}

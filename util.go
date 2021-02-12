@@ -1,9 +1,11 @@
 package traft
 
 import (
+	context "context"
 	"fmt"
 	"log"
 	"net"
+	"time"
 
 	"github.com/kr/pretty"
 	grpc "google.golang.org/grpc"
@@ -58,4 +60,23 @@ func serveCluster(ids []int64) ([]*grpc.Server, []*TRaft) {
 	}
 
 	return servers, trafts
+}
+
+// send rpc to addr.
+func rpcTo(addr string,
+	action func(TRaftClient, context.Context)) {
+
+	conn, err := grpc.Dial(addr, grpc.WithInsecure())
+	if err != nil {
+		// TODO check error
+		panic("wooooooh")
+	}
+	defer conn.Close()
+
+	cli := NewTRaftClient(conn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	action(cli, ctx)
 }
