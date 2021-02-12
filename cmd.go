@@ -32,3 +32,19 @@ func (c *Cmd) ShortStr() string {
 	return fmt.Sprintf("%s(%s, %s)",
 		c.Op, c.Key, cmdValueShortStr(c.Value))
 }
+
+// Interfering check if a command interferes with another one,
+// i.e. they change the same key.
+func (a *Cmd) Interfering(b *Cmd) bool {
+	if a == nil || b == nil {
+		return false
+	}
+
+	if a.Op == "set" && b.Op == "set" {
+		if a.Key == b.Key {
+			return true
+		}
+	}
+
+	return false
+}
