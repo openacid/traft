@@ -1,7 +1,9 @@
 package traft
 
 import (
+	fmt "fmt"
 	"math/bits"
+	"strings"
 
 	proto "github.com/gogo/protobuf/proto"
 	"github.com/openacid/low/bitmap"
@@ -240,4 +242,16 @@ func (tb *TailBitmap) Len() int64 {
 	}
 
 	return tb.Offset + int64(r+1)<<6 - int64(bits.LeadingZeros64(tb.Words[r]))
+}
+
+func (tb *TailBitmap) ShortStr() string {
+	if tb == nil {
+		return "0"
+	}
+	s := []string{fmt.Sprintf("%d", tb.Offset)}
+	for _, w := range tb.Words {
+		s = append(s, fmt.Sprintf(":%x", w))
+	}
+
+	return strings.Join(s, "")
 }

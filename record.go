@@ -36,10 +36,13 @@ func (r *Record) ShortStr() string {
 		return "<>"
 	}
 
-	return fmt.Sprintf("<%s:%03d{%s}>",
+	return fmt.Sprintf("<%s:%03d{%s}-%s→%s>",
 		r.Author.ShortStr(),
 		r.Seq,
-		r.Cmd.ShortStr())
+		r.Cmd.ShortStr(),
+		r.Overrides.ShortStr(),
+		r.Depends.ShortStr(),
+	)
 }
 
 func RecordsShortStr(rs []*Record) string {

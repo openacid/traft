@@ -94,6 +94,10 @@ message Record {
     // Cmd describes what this log does.
     Cmd Cmd = 30;
 
+    // The logs that must be executed before this one.
+    // Normally it is the least lsn on a leader that is not purged yet.
+    TailBitmap Depends = 32;
+
     // Overrides describes what previous logs this log record overrides.
     TailBitmap Overrides = 40;
 }

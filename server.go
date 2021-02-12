@@ -73,7 +73,11 @@ func buildPseudoLogs(
 	return start, logs
 }
 
+// Only a established leader should use this func.
 func (tr *TRaft) AddLog(cmd *Cmd) *Record {
+
+	// TODO lock
+
 	me := tr.Status[tr.Id]
 
 	if me.VotedFor.Id != tr.Id {
@@ -85,10 +89,30 @@ func (tr *TRaft) AddLog(cmd *Cmd) *Record {
 	r := NewRecord(me.VotedFor, lsn, cmd)
 
 	// find the first interfering record.
+
 	var i int
 	for i = len(tr.Logs) - 1; i >= 0; i-- {
-
+		prev := tr.Logs[i]
+		if r.Interfering(prev) {
+			r.Overrides = prev.Overrides.Clone()
+			r.Overrides.Set(lsn)
+			break
+		}
 	}
+
+	if i == -1 {
+		// there is not a interfering record.
+		r.Overrides = NewTailBitmap(0)
+	}
+
+	// all log I do not know must be executed in order.
+	// Because I do not know of the intefering relations.
+	r.Depends = NewTailBitmap(tr.LogOffset)
+
+	// reduce bitmap size by removing unknown logs
+	r.Overrides.Union(NewTailBitmap(tr.LogOffset & ^63))
+
+	tr.Logs = append(tr.Logs, r)
 
 	return r
 }

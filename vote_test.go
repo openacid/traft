@@ -109,7 +109,7 @@ func TestTRaft_Vote(t *testing.T) {
 				votedFor:     lid(2, 2),
 				committer:    lid(0, id),
 				allLogBitmap: NewTailBitmap(0, 5, 6),
-				logs:         "[<001#001:006{set(x, 6)}>]",
+				logs:         "[<001#001:006{set(x, 6)}-0→0>]",
 			},
 		},
 
@@ -122,7 +122,7 @@ func TestTRaft_Vote(t *testing.T) {
 				votedFor:     lid(2, 2),
 				committer:    lid(0, id),
 				allLogBitmap: NewTailBitmap(0, 5, 6, 7),
-				logs:         "[<>, <001#001:007{set(x, 7)}>]",
+				logs:         "[<>, <001#001:007{set(x, 7)}-0→0>]",
 			},
 		},
 
@@ -293,4 +293,39 @@ func TestTRaft_Replicate(t *testing.T) {
 			},
 			"%d-th: voter: case: %+v", i+1, c)
 	}
+}
+
+func TestTRaft_AddLog(t *testing.T) {
+
+	ta := require.New(t)
+
+	id := int64(1)
+	tr := &TRaft{Node: *NewNode(id, map[int64]string{id: "123"})}
+	tr.AddLog(NewCmdI64("set", "x", 1))
+	// me := tr.Status[id]
+
+	ta.Equal("[<000#001:000{set(x, 1)}-0→0>]", RecordsShortStr(tr.Logs))
+
+	varnames := "wxyz"
+
+	for i := 0; i < 67; i++ {
+		vi := i % len(varnames)
+		tr.AddLog(NewCmdI64("set", varnames[vi:vi+1], int64(i)))
+	}
+	l := len(tr.Logs)
+	ta.Equal("<000#001:067{set(y, 66)}-0:8888888888888880:8→0>", tr.Logs[l-1].ShortStr())
+
+	// truncate some logs, then add another 67
+	// To check Overrides and Depends
+
+	tr.LogOffset = 65
+	tr.Logs = tr.Logs[65:]
+
+	for i := 0; i < 67; i++ {
+		vi := i % len(varnames)
+		tr.AddLog(NewCmdI64("set", varnames[vi:vi+1], 100+int64(i)))
+	}
+	l = len(tr.Logs)
+	ta.Equal("<000#001:134{set(y, 166)}-64:4444444444444448:44→64:1>", tr.Logs[l-1].ShortStr())
+
 }
