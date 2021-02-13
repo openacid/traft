@@ -2,6 +2,8 @@
 // and a more generalized member change algo.
 package traft
 
+import "sort"
+
 func NewNode(id int64, idAddrs map[int64]string) *Node {
 	_, ok := idAddrs[id]
 	if !ok {
@@ -9,14 +11,22 @@ func NewNode(id int64, idAddrs map[int64]string) *Node {
 	}
 
 	members := make(map[int64]*ReplicaInfo, 0)
-	p := int64(0)
-	for id, addr := range idAddrs {
+
+	ids := []int64{}
+	for id, _ := range idAddrs {
+		ids = append(ids, id)
+	}
+
+	sort.Slice(ids, func(i, j int) bool {
+		return ids[i] < ids[j]
+	})
+
+	for p, id := range ids {
 		members[id] = &ReplicaInfo{
 			Id:       id,
-			Addr:     addr,
-			Position: p,
+			Addr:     idAddrs[id],
+			Position: int64(p),
 		}
-		p++
 	}
 
 	conf := &ClusterConfig{

@@ -4,10 +4,72 @@ package traft
 
 import (
 	context "context"
+	"encoding/json"
 	fmt "fmt"
 	sync "sync"
+	"time"
+
+	"github.com/openacid/low/mathext/util"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	// "google.golang.org/protobuf/proto"
 )
+
+var (
+	ErrStaleLog  = errors.New("local log is stale")
+	ErrStaleTerm = errors.New("local Term is stale")
+	ErrTimeout   = errors.New("timeout")
+)
+
+var (
+	llg = zap.NewNop()
+	lg  *zap.SugaredLogger
+)
+
+func init() {
+	// if os.Getenv("CLUSTER_DEBUG") != "" {
+	// }
+	var err error
+	llg, err = zap.NewProduction()
+	if err != nil {
+		panic(err)
+	}
+	lg = llg.Sugar()
+
+	// initZap()
+}
+
+func initZap() {
+	rawJSON := []byte(`{
+	  "level": "debug",
+	  "encoding": "json",
+	  "outputPaths": ["stdout", "/tmp/logs"],
+	  "errorOutputPaths": ["stderr"],
+	  "initialFields": {"foo": "bar"},
+	  "encoderConfig": {
+	    "messageKey": "message",
+	    "levelKey": "level",
+	    "levelEncoder": "lowercase"
+	  }
+	}`)
+
+	var cfg zap.Config
+	if err := json.Unmarshal(rawJSON, &cfg); err != nil {
+		panic(err)
+	}
+
+	var err error
+	llg, err = cfg.Build()
+	if err != nil {
+		panic(err)
+	}
+	defer llg.Sync()
+
+	llg.Info("logger construction succeeded")
+
+	lg = llg.Sugar()
+
+}
 
 type TRaft struct {
 	// TODO lock first
@@ -73,13 +135,17 @@ func buildPseudoLogs(
 	return start, logs
 }
 
-func (tr *TRaft) VoteLoop() {
+// returns:
+// voted or not
+// error: ErrStaleLog, ErrStaleTerm, ErrTimeout
+// higherTerm: if seen, upgrade term and retry
+func (tr *TRaft) VoteOnce(term int64) (bool, error, int64) {
+	// TODO lock
 
 	id := tr.Id
-
 	me := tr.Status[id]
 
-	// init if not:
+	me.VotedFor.Term = term
 	me.VotedFor.Id = id
 
 	req := &VoteReq{
@@ -88,19 +154,88 @@ func (tr *TRaft) VoteLoop() {
 		Accepted:  me.Accepted,
 	}
 
-	for _, rinfo := range tr.Config.Members {
-		addr := rinfo.Addr
+	type voteRes struct {
+		from  *ReplicaInfo
+		reply *VoteReply
+	}
 
-		rpcTo(addr, func(cli TRaftClient, ctx context.Context) {
-			var err error
-			reply, err := cli.Vote(ctx, req)
-			_ = reply
-			if err != nil {
-				panic("wtf")
+	ch := make(chan *voteRes)
+
+	for _, rinfo := range tr.Config.Members {
+		if rinfo.Id == id {
+			continue
+		}
+
+		go func(addr string, ch chan *voteRes) {
+			rpcTo(addr, func(cli TRaftClient, ctx context.Context) {
+				lg.Infow("send", "addr", addr)
+				reply, err := cli.Vote(ctx, req)
+				lg.Infow("recv", "from", rinfo, "reply", reply, "err", err)
+
+				_ = reply
+				if err != nil {
+					// TODO
+					panic("wtf")
+				}
+
+				ch <- &voteRes{rinfo, reply}
+			})
+		}(rinfo.Addr, ch)
+	}
+
+	received := uint64(0)
+	// I vote myself
+	received |= 1 << uint(tr.Config.Members[id].Position)
+	higherTerm := int64(-1)
+	var logErr error
+	waitingFor := len(tr.Config.Members) - 1
+
+	for waitingFor > 0 {
+		select {
+		case res := <-ch:
+			repl := res.reply
+
+			lg.Infow("got res", "res", res)
+
+			if repl.VotedFor.Equal(me.VotedFor) {
+				// vote granted
+				received |= 1 << uint(res.from.Position)
+				if tr.Config.IsQuorum(received) {
+					// TODO cancel timer
+					return true, nil, -1
+				}
+			} else {
+				rTerm := repl.VotedFor.Term
+				if rTerm > me.VotedFor.Term {
+					higherTerm = util.MaxI64(higherTerm, rTerm)
+				}
+
+				if CmpLogStatus(repl, me) > 0 {
+					// TODO cancel timer
+					logErr = errors.Wrapf(ErrStaleLog,
+						"local: committer:%s max-lsn:%d remote: committer:%s max-lsn:%d",
+						me.Committer.ShortStr(),
+						me.Accepted.Len(),
+						repl.Committer.ShortStr(),
+						repl.Accepted.Len())
+				}
 			}
 
-		})
+			waitingFor--
+
+		case <-time.After(time.Second):
+			// timeout
+			// TODO cancel timer
+			return false, errors.Wrapf(ErrTimeout, "voting"), higherTerm
+		}
 	}
+
+	if logErr != nil {
+		return false, logErr, higherTerm
+	}
+
+	err := errors.Wrapf(ErrStaleTerm, "seen a higher term:%d", higherTerm)
+	return false, err, higherTerm
 }
 
 // Only a established leader should use this func.
@@ -187,7 +322,6 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 	end := me.Accepted.Len()
 	for i := start; i < end; i++ {
 		if me.Accepted.Get(i) != 0 && req.Accepted.Get(i) == 0 {
-			fmt.Println("append:", tr.Logs[i-tr.LogOffset].ShortStr())
 			logs = append(logs, tr.Logs[i-tr.LogOffset])
 		}
 	}

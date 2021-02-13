@@ -1,6 +1,7 @@
 package traft
 
 import (
+	fmt "fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -23,6 +24,9 @@ func Test_serveCluster(t *testing.T) {
 	for i, tr := range trafts {
 		// 110 101 011
 		ta.Equal([]uint64{3, 5, 6}, tr.Config.Quorums)
+
+		fmt.Println("===", tr.Config.Members)
+		fmt.Println("---", tr.Config.SortedReplicaInfos())
 
 		ta.Equal([]*ReplicaInfo{
 			&ReplicaInfo{Id: 1, Addr: ":5501", Position: 0},

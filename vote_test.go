@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -195,6 +196,95 @@ func TestTRaft_Vote(t *testing.T) {
 			},
 			"%d-th: case: %+v", i+1, c)
 	}
+}
+
+func TestTRaft_VoteOnce(t *testing.T) {
+
+	ta := require.New(t)
+	_ = ta
+
+	ids := []int64{1, 2, 3}
+	id1 := int64(1)
+	id2 := int64(2)
+	id3 := int64(3)
+
+	_ = id1
+
+	lid := NewLeaderId
+
+	servers, trafts := serveCluster(ids)
+	defer func() {
+		for _, s := range servers {
+			s.Stop()
+		}
+	}()
+
+	t1 := trafts[0]
+	t2 := trafts[1]
+	t3 := trafts[2]
+
+	t.Run("2emptyVoter", func(t *testing.T) {
+		ta := require.New(t)
+		t2.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
+		t3.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
+
+		voted, err, higher := t1.VoteOnce(1)
+
+		ta.True(voted)
+		ta.Nil(err)
+		ta.Equal(int64(-1), higher)
+	})
+	t.Run("reject-by-one/stalelog", func(t *testing.T) {
+		ta := require.New(t)
+		t2.initTraft(lid(2, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
+		t3.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
+
+		voted, err, higher := t1.VoteOnce(1)
+		ta.True(voted)
+		ta.Nil(err)
+		ta.Equal(int64(-1), higher)
+	})
+	t.Run("reject-by-one/higherTerm", func(t *testing.T) {
+		ta := require.New(t)
+		t2.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
+		t3.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(5, id3))
+
+		voted, err, higher := t1.VoteOnce(1)
+		ta.False(voted)
+		ta.Nil(err)
+		ta.Equal(int64(5), higher)
+	})
+	t.Run("reject-by-two/stalelog", func(t *testing.T) {
+		ta := require.New(t)
+		t2.initTraft(lid(2, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
+		t3.initTraft(lid(0, 0), lid(0, 0), []int64{0}, nil, nil, lid(0, id3))
+
+		voted, err, higher := t1.VoteOnce(1)
+		ta.False(voted)
+		ta.Equal(ErrStaleLog, errors.Cause(err))
+		ta.Equal(int64(-1), higher)
+	})
+	t.Run("reject-by-two/stalelog-higherTerm", func(t *testing.T) {
+		ta := require.New(t)
+		t2.initTraft(lid(2, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
+		t3.initTraft(lid(0, 0), lid(0, 0), []int64{0}, nil, nil, lid(5, id3))
+
+		voted, err, higher := t1.VoteOnce(1)
+		ta.False(voted)
+		ta.Equal(ErrStaleLog, errors.Cause(err))
+		ta.Equal(int64(5), higher)
+	})
+	t.Run("reject-by-two/higherTerm", func(t *testing.T) {
+		ta := require.New(t)
+		t2.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(3, id2))
+		t3.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(5, id3))
+
+		voted, err, higher := t1.VoteOnce(1)
+		ta.False(voted)
+		ta.Equal(ErrStaleTerm, errors.Cause(err))
+		ta.Equal(int64(5), higher)
+	})
+
 }
 
 func TestTRaft_Replicate(t *testing.T) {
