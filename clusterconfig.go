@@ -22,3 +22,17 @@ func (cc *ClusterConfig) SortedReplicaInfos() []*ReplicaInfo {
 
 	return members
 }
+
+// check if a set of member is a quorum.
+// The set of member is a bitmap in which a `1` indicates a present member.
+// In this system, the position of `1` is ReplicaInfo.Position.
+func (cc *ClusterConfig) IsQuorum(v uint64) bool {
+
+	for _, q := range cc.Quorums {
+		if v&q == q {
+			return true
+		}
+	}
+
+	return false
+}
