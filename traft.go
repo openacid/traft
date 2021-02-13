@@ -2,9 +2,16 @@
 // and a more generalized member change algo.
 package traft
 
-import "sort"
+import (
+	"net"
+	"sort"
+	sync "sync"
 
-func NewNode(id int64, idAddrs map[int64]string) *Node {
+	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+)
+
+func NewTRaft(id int64, idAddrs map[int64]string) *TRaft {
 	_, ok := idAddrs[id]
 	if !ok {
 		panic("my id is not in cluster")
@@ -47,7 +54,68 @@ func NewNode(id int64, idAddrs map[int64]string) *Node {
 		Status: progs,
 	}
 
-	return node
+	// TODO buffer size
+	shutdown := make(chan struct{})
+	actionCh := make(chan *action)
+
+	tr := &TRaft{
+		shutdown:   shutdown,
+		actionCh:   actionCh,
+		grpcServer: nil,
+		wg:         sync.WaitGroup{},
+		Node:       *node,
+	}
+
+	{
+		s := grpc.NewServer()
+		RegisterTRaftServer(s, tr)
+		reflection.Register(s)
+
+		tr.grpcServer = s
+	}
+
+	return tr
+}
+
+func (tr *TRaft) Start() {
+	tr.StartServer()
+	tr.StartLoops()
+}
+
+func (tr *TRaft) StartServer() {
+
+	id := tr.Id
+	addr := tr.Config.Members[id].Addr
+
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		lg.Fatalw("Fail to listen:", "addr", addr, "err", err)
+	}
+
+	go tr.grpcServer.Serve(lis)
+	lg.Infow("grpc started", "addr", addr)
+}
+
+func (tr *TRaft) StartLoops() {
+
+	tr.wg.Add(1)
+	go tr.Loop(tr.shutdown, tr.actionCh)
+	lg.Infow("Started Loop")
+
+	tr.wg.Add(1)
+	go tr.VoteLoop(tr.shutdown, tr.actionCh)
+	lg.Infow("Start VoteLoop")
+}
+
+func (tr *TRaft) Stop() {
+	lg.Infow("Stopping grpc")
+	tr.grpcServer.Stop()
+
+	lg.Infow("close shutdown")
+	close(tr.shutdown)
+
+	tr.wg.Wait()
+	lg.Infow("TRaft stopped")
 }
 
 func emptyProgress(id int64) *ReplicaStatus {

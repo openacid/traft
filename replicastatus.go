@@ -18,6 +18,11 @@ type logStat interface {
 	GetAccepted() *TailBitmap
 }
 
+type leaderStat interface {
+	GetVotedFor() *LeaderId
+	GetVoteExpireAt() int64
+}
+
 func CmpLogStatus(a, b logStat) int {
 	r := a.GetCommitter().Cmp(b.GetCommitter())
 	if r != 0 {
@@ -25,6 +30,20 @@ func CmpLogStatus(a, b logStat) int {
 	}
 
 	return cmpI64(a.GetAccepted().Len(), b.GetAccepted().Len())
+}
+
+func ExportLogStatus(ls logStat) *LogStatus {
+	return &LogStatus{
+		Committer: ls.GetCommitter().Clone(),
+		Accepted:  ls.GetAccepted().Clone(),
+	}
+}
+
+func ExportLeaderStatus(ls leaderStat) *LeaderStatus {
+	return &LeaderStatus{
+		VotedFor:     ls.GetVotedFor().Clone(),
+		VoteExpireAt: ls.GetVoteExpireAt(),
+	}
 }
 
 // CmpAccepted compares log related fields with another ballot.

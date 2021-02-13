@@ -13,10 +13,10 @@ func Test_serveCluster(t *testing.T) {
 
 	ids := []int64{1, 2, 3}
 
-	servers, trafts := serveCluster(ids)
+	trafts := serveCluster(ids)
 
 	defer func() {
-		for _, s := range servers {
+		for _, s := range trafts {
 			s.Stop()
 		}
 	}()

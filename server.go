@@ -6,12 +6,14 @@ import (
 	context "context"
 	"encoding/json"
 	fmt "fmt"
+	"math/rand"
 	sync "sync"
 	"time"
 
 	"github.com/openacid/low/mathext/util"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	grpc "google.golang.org/grpc"
 	// "google.golang.org/protobuf/proto"
 )
 
@@ -74,6 +76,20 @@ func initZap() {
 type TRaft struct {
 	// TODO lock first
 	mu sync.Mutex
+
+	// close it to notify all goroutines to shutdown.
+	shutdown chan struct{}
+
+	// Communication channel with Loop().
+	// Only Loop() modifies state of TRaft.
+	// Other goroutines send an action through this channel and wait for an
+	// operation reply.
+	actionCh chan *action
+
+	grpcServer *grpc.Server
+
+	wg sync.WaitGroup
+
 	Node
 }
 
@@ -135,23 +151,178 @@ func buildPseudoLogs(
 	return start, logs
 }
 
+type trRst struct {
+	logStat    *LogStatus
+	leaderStat *LeaderStatus
+	config     *ClusterConfig
+
+	ok bool
+}
+
+type action struct {
+	act   string
+	trRst *trRst
+	rstCh chan *trRst
+}
+
+// Loop handles actions from other components.
+func (tr *TRaft) Loop(shutdown <-chan struct{}, act <-chan *action) {
+	defer tr.wg.Done()
+
+	id := tr.Id
+
+	for {
+		select {
+		case <-shutdown:
+			return
+		case a := <-act:
+			switch a.act {
+			case "logStat":
+				a.rstCh <- &trRst{
+					logStat: ExportLogStatus(tr.Status[id]),
+				}
+			case "leaderStat":
+				a.rstCh <- &trRst{
+					leaderStat: ExportLeaderStatus(tr.Status[id]),
+				}
+			case "config":
+				a.rstCh <- &trRst{
+					config: tr.Config.Clone(),
+				}
+			case "update-leaderStat":
+				leadst := a.trRst.leaderStat
+				tr.Status[id].VotedFor = leadst.VotedFor.Clone()
+				tr.Status[id].VoteExpireAt = leadst.VoteExpireAt
+				a.rstCh <- &trRst{ok: true}
+			}
+		}
+	}
+}
+
+func query(actCh chan<- *action, act string) *trRst {
+	rstCh := make(chan *trRst)
+	actCh <- &action{act, nil, rstCh}
+	rst := <-rstCh
+	return rst
+}
+
+func update(actCh chan<- *action, act string, rst *trRst) *trRst {
+	rstCh := make(chan *trRst)
+	actCh <- &action{act, rst, rstCh}
+	ok := <-rstCh
+	return ok
+
+}
+
+// run forever to elect itself as leader if there is no leader in this cluster.
+func (tr *TRaft) VoteLoop(shutdown <-chan struct{}, act chan<- *action) {
+	defer tr.wg.Done()
+
+	// return true if shutting down
+	slp := func(sleep time.Duration) bool {
+		select {
+		case <-time.After(sleep):
+			lg.Infow("VoteLoop woke up")
+			return false
+		case <-shutdown:
+			return true
+		}
+	}
+
+	leaderLease := int64(time.Second * 1)
+	maxStaleTermSleep := time.Millisecond * 10
+	heartBeatSleep := time.Millisecond * 10
+	followerSleep := time.Millisecond * 10
+
+	leadst := query(act, "leaderStat").leaderStat
+	for {
+
+		now := uSecond()
+
+		// TODO refine this: wait until VoteExpireAt and watch for missing
+		// heartbeat.
+		if now < leadst.VoteExpireAt {
+
+			if leadst.VotedFor.Id == tr.Id {
+				// I am a leader
+				// TODO heartbeat other replicas to keep leadership
+				if slp(heartBeatSleep) {
+					return
+				}
+			} else {
+				if slp(followerSleep) {
+					return
+				}
+			}
+			leadst = query(act, "leaderStat").leaderStat
+			continue
+		}
+
+		// call for a new leader!!!
+
+		logst := query(act, "logStat").logStat
+		config := query(act, "config").config
+
+		voted, err, higher := VoteOnce(
+			leadst.VotedFor,
+			logst,
+			config,
+		)
+
+		if voted {
+			leadst.VoteExpireAt = uSecond() + leaderLease
+			update(act, "update-leaderStat", &trRst{
+				leaderStat: leadst,
+			})
+
+			if slp(heartBeatSleep) {
+				return
+			}
+
+		} else {
+			switch errors.Cause(err) {
+			case ErrStaleTerm:
+				if slp(time.Millisecond*5 + time.Duration(rand.Int63n(int64(maxStaleTermSleep)))) {
+					return
+				}
+				leadst.VotedFor.Term = higher + 1
+				continue
+			case ErrTimeout:
+				if slp(time.Millisecond * 10) {
+					return
+				}
+				continue
+			case ErrStaleLog:
+				// I can not be the leader.
+				// sleep a day. waiting for others to elect to be a leader.
+				if slp(time.Second * 86400) {
+					return
+				}
+				continue
+			}
+		}
+	}
+}
+
 // returns:
 // voted or not
 // error: ErrStaleLog, ErrStaleTerm, ErrTimeout
 // higherTerm: if seen, upgrade term and retry
-func (tr *TRaft) VoteOnce(term int64) (bool, error, int64) {
-	// TODO lock
+func VoteOnce(
+	candidate *LeaderId,
+	logStatus logStat,
+	config *ClusterConfig,
+) (bool, error, int64) {
 
-	id := tr.Id
-	me := tr.Status[id]
+	// TODO vote need cluster id:
+	// a stale member may try to elect on another cluster.
 
-	me.VotedFor.Term = term
-	me.VotedFor.Id = id
+	id := candidate.Id
 
 	req := &VoteReq{
-		Candidate: me.VotedFor,
-		Committer: me.Committer,
-		Accepted:  me.Accepted,
+		Candidate: candidate,
+		Committer: logStatus.GetCommitter(),
+		Accepted:  logStatus.GetAccepted(),
 	}
 
 	type voteRes struct {
@@ -161,14 +332,15 @@ func (tr *TRaft) VoteOnce(term int64) (bool, error, int64) {
 
 	ch := make(chan *voteRes)
 
-	for _, rinfo := range tr.Config.Members {
+	for _, rinfo := range config.Members {
 		if rinfo.Id == id {
 			continue
 		}
 
-		go func(addr string, ch chan *voteRes) {
-			rpcTo(addr, func(cli TRaftClient, ctx context.Context) {
-				lg.Infow("send", "addr", addr)
+		go func(rinfo ReplicaInfo, ch chan *voteRes) {
+			rpcTo(rinfo.Addr, func(cli TRaftClient, ctx context.Context) {
+
+				lg.Infow("send", "addr", rinfo.Addr)
 				reply, err := cli.Vote(ctx, req)
 				lg.Infow("recv", "from", rinfo, "reply", reply, "err", err)
 
@@ -178,17 +350,17 @@ func (tr *TRaft) VoteOnce(term int64) (bool, error, int64) {
 					panic("wtf")
 				}
 
-				ch <- &voteRes{rinfo, reply}
+				ch <- &voteRes{&rinfo, reply}
 			})
-		}(rinfo.Addr, ch)
+		}(*rinfo, ch)
 	}
 
 	received := uint64(0)
 	// I vote myself
-	received |= 1 << uint(tr.Config.Members[id].Position)
+	received |= 1 << uint(config.Members[id].Position)
 	higherTerm := int64(-1)
 	var logErr error
-	waitingFor := len(tr.Config.Members) - 1
+	waitingFor := len(config.Members) - 1
 
 	for waitingFor > 0 {
 		select {
@@ -197,25 +369,25 @@ func (tr *TRaft) VoteOnce(term int64) (bool, error, int64) {
 
 			lg.Infow("got res", "res", res)
 
-			if repl.VotedFor.Equal(me.VotedFor) {
+			if repl.VotedFor.Equal(candidate) {
 				// vote granted
 				received |= 1 << uint(res.from.Position)
-				if tr.Config.IsQuorum(received) {
+				if config.IsQuorum(received) {
 					// TODO cancel timer
 					return true, nil, -1
 				}
 			} else {
 				rTerm := repl.VotedFor.Term
-				if rTerm > me.VotedFor.Term {
+				if rTerm > candidate.Term {
 					higherTerm = util.MaxI64(higherTerm, rTerm)
 				}
 
-				if CmpLogStatus(repl, me) > 0 {
+				if CmpLogStatus(repl, logStatus) > 0 {
 					// TODO cancel timer
 					logErr = errors.Wrapf(ErrStaleLog,
 						"local: committer:%s max-lsn:%d remote: committer:%s max-lsn:%d",
-						me.Committer.ShortStr(),
-						me.Accepted.Len(),
+						logStatus.GetCommitter().ShortStr(),
+						logStatus.GetAccepted().Len(),
 						repl.Committer.ShortStr(),
 						repl.Accepted.Len())
 				}

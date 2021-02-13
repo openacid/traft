@@ -137,6 +137,16 @@ message Node {
     map<int64, ReplicaStatus> Status = 6;
 }
 
+message LogStatus {
+    LeaderId Committer = 4;
+    TailBitmap Accepted = 1;
+}
+
+message LeaderStatus {
+    LeaderId VotedFor = 10;
+    int64    VoteExpireAt = 11;
+}
+
 message ReplicaStatus {
 
     // last seen term+id
@@ -154,6 +164,10 @@ message ReplicaStatus {
     // Before receiving a message, VotedFor is the leader this replica knows of,
     // Accepted is nil.
     LeaderId VotedFor = 10;
+
+    // at what time the voted value expires,
+    // in unix time in nanosecond: 10^-9 second
+    int64    VoteExpireAt = 11;
 
     // The Leader tried to commit all of the local logs.
     // The Committer is the same as Author if a log entry is committed by its

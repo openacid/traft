@@ -1,5 +1,7 @@
 package traft
 
+import proto "github.com/gogo/protobuf/proto"
+
 func (cc *ClusterConfig) MaxPosition() int64 {
 	maxPos := int64(0)
 	for _, m := range cc.Members {
@@ -9,6 +11,10 @@ func (cc *ClusterConfig) MaxPosition() int64 {
 	}
 
 	return maxPos
+}
+
+func (cc *ClusterConfig) Clone() *ClusterConfig {
+	return proto.Clone(cc).(*ClusterConfig)
 }
 
 func (cc *ClusterConfig) SortedReplicaInfos() []*ReplicaInfo {
