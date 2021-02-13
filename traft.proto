@@ -175,10 +175,12 @@ message ReplicaStatus {
 message ReplicaInfo {
     int64 Id = 1;
     string Addr = 2;
+    // Position indicates the index of this member in its cluster.
+    int64 Position = 3;
 }
 
 message ClusterConfig {
-    repeated ReplicaInfo Members = 11;
+    map<int64, ReplicaInfo> Members = 11;
     repeated uint64 Quorums = 21;
 }
 

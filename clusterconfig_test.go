@@ -6,31 +6,33 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestClusterConfig_GetReplicaInfo(t *testing.T) {
+func TestClusterConfig_SortedReplicaInfos(t *testing.T) {
 
 	ta := require.New(t)
 
 	cc := &ClusterConfig{
-		Members: []*ReplicaInfo{
-			{1, "111"},
-			{3, "333"},
-			{2, "222"},
+		Members: map[int64]*ReplicaInfo{
+			1: {1, "111", 0},
+			2: {2, "222", 2},
+			3: {3, "333", 4},
 		},
 	}
+
+	sorted := cc.SortedReplicaInfos()
 
 	cases := []struct {
 		input int64
 		want  *ReplicaInfo
 	}{
-		{0, nil},
-		{1, &ReplicaInfo{1, "111"}},
-		{2, &ReplicaInfo{2, "222"}},
-		{3, &ReplicaInfo{3, "333"}},
-		{4, nil},
+		{0, &ReplicaInfo{1, "111", 0}},
+		{1, nil},
+		{2, &ReplicaInfo{2, "222", 2}},
+		{3, nil},
+		{4, &ReplicaInfo{3, "333", 4}},
 	}
 
 	for i, c := range cases {
-		got := cc.GetReplicaInfo(c.input)
+		got := sorted[c.input]
 		ta.Equal(c.want, got, "%d-th: case: %+v", i+1, c)
 	}
 }

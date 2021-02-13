@@ -81,7 +81,7 @@ func TestTRaft_Vote(t *testing.T) {
 		}
 
 		var reply *VoteReply
-		addr := t1.Config.GetReplicaInfo(id).Addr
+		addr := t1.Config.Members[id].Addr
 
 		rpcTo(addr, func(cli TRaftClient, ctx context.Context) {
 			var err error
@@ -231,7 +231,7 @@ func TestTRaft_Replicate(t *testing.T) {
 		}
 
 		var reply *ReplicateReply
-		addr := t1.Config.GetReplicaInfo(id).Addr
+		addr := t1.Config.Members[id].Addr
 
 		rpcTo(addr, func(cli TRaftClient, ctx context.Context) {
 			var err error

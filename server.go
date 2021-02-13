@@ -73,6 +73,36 @@ func buildPseudoLogs(
 	return start, logs
 }
 
+func (tr *TRaft) VoteLoop() {
+
+	id := tr.Id
+
+	me := tr.Status[id]
+
+	// init if not:
+	me.VotedFor.Id = id
+
+	req := &VoteReq{
+		Candidate: me.VotedFor,
+		Committer: me.Committer,
+		Accepted:  me.Accepted,
+	}
+
+	for _, rinfo := range tr.Config.Members {
+		addr := rinfo.Addr
+
+		rpcTo(addr, func(cli TRaftClient, ctx context.Context) {
+			var err error
+			reply, err := cli.Vote(ctx, req)
+			_ = reply
+			if err != nil {
+				panic("wtf")
+			}
+
+		})
+	}
+}
+
 // Only a established leader should use this func.
 func (tr *TRaft) AddLog(cmd *Cmd) *Record {
 

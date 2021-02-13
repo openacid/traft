@@ -2,30 +2,28 @@
 // and a more generalized member change algo.
 package traft
 
-import "sort"
-
 func NewNode(id int64, idAddrs map[int64]string) *Node {
 	_, ok := idAddrs[id]
 	if !ok {
 		panic("my id is not in cluster")
 	}
 
-	members := make([]*ReplicaInfo, 0)
+	members := make(map[int64]*ReplicaInfo, 0)
+	p := int64(0)
 	for id, addr := range idAddrs {
-		members = append(members, &ReplicaInfo{
-			Id:   id,
-			Addr: addr,
-		})
+		members[id] = &ReplicaInfo{
+			Id:       id,
+			Addr:     addr,
+			Position: p,
+		}
+		p++
 	}
-
-	sort.Slice(members, func(i, j int) bool {
-		return members[i].Id < members[j].Id
-	})
 
 	conf := &ClusterConfig{
 		Members: members,
-		Quorums: buildMajorityQuorums(1<<uint(len(members)) - 1),
 	}
+	maxPos := conf.MaxPosition()
+	conf.Quorums = buildMajorityQuorums(1<<uint(maxPos+1) - 1)
 
 	progs := make(map[int64]*ReplicaStatus, 0)
 	for _, m := range members {

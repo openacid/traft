@@ -21,16 +21,14 @@ func Test_serveCluster(t *testing.T) {
 	}()
 
 	for i, tr := range trafts {
-		ta.Equal(&ClusterConfig{
-			Members: []*ReplicaInfo{
-				&ReplicaInfo{Id: 1, Addr: ":5501"},
-				&ReplicaInfo{Id: 2, Addr: ":5502"},
-				&ReplicaInfo{Id: 3, Addr: ":5503"},
-			},
-			Quorums: []uint64{
-				3, 5, 6,
-			},
-		}, tr.Config)
+		// 110 101 011
+		ta.Equal([]uint64{3, 5, 6}, tr.Config.Quorums)
+
+		ta.Equal([]*ReplicaInfo{
+			&ReplicaInfo{Id: 1, Addr: ":5501", Position: 0},
+			&ReplicaInfo{Id: 2, Addr: ":5502", Position: 1},
+			&ReplicaInfo{Id: 3, Addr: ":5503", Position: 2},
+		}, tr.Config.SortedReplicaInfos())
 
 		ta.Equal(int64(0), tr.LogOffset)
 		ta.Equal([]*Record{}, tr.Logs)
