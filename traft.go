@@ -58,7 +58,7 @@ func NewTRaft(id int64, idAddrs map[int64]string) *TRaft {
 
 	// TODO buffer size
 	shutdown := make(chan struct{})
-	actionCh := make(chan *action)
+	actionCh := make(chan *queryBody)
 
 	tr := &TRaft{
 		shutdown:   shutdown,
@@ -130,7 +130,7 @@ func (tr *TRaft) Stop() {
 	lg.Infow("TRaft stopped")
 }
 
-func (tr *TRaft) sendMsg(msg ...interface{}) {
+func toStr(v interface{}) string {
 	type sstr interface {
 		ShortStr() string
 	}
@@ -139,32 +139,37 @@ func (tr *TRaft) sendMsg(msg ...interface{}) {
 		String() string
 	}
 
+	{
+		ss, ok := v.(sstr)
+		if ok {
+			return ss.ShortStr()
+		}
+	}
+	{
+		ss, ok := v.(str)
+		if ok {
+			return ss.String()
+		}
+	}
+	return fmt.Sprintf("%v", v)
+
+}
+
+func (tr *TRaft) sendMsg(msg ...interface{}) {
+
 	mm := []string{fmt.Sprintf("Id=%d", tr.Id)}
 	for _, m := range msg {
-		{
-			ss, ok := m.(sstr)
-			if ok {
-				mm = append(mm, ss.ShortStr())
-				continue
-			}
-		}
-		{
-			ss, ok := m.(str)
-			if ok {
-				mm = append(mm, ss.String())
-				continue
-			}
-		}
-		mm = append(mm, fmt.Sprintf("%v", m))
+		mm = append(mm, toStr(m))
 	}
 
 	vv := strings.Join(mm, " ")
+	fmt.Println("===", vv)
 
 	select {
 	case tr.MsgCh <- vv:
-		lg.Infow("sent msg", "msg", vv)
+		lg.Infow("succ-send-msg", "msg", vv)
 	default:
-		lg.Infow("failure sending msg", "msg", vv)
+		lg.Infow("fail-send-msg", "msg", vv)
 	}
 }
 

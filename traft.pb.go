@@ -27,7 +27,7 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
-// Cmd defines the action a log record does
+// Cmd defines the queryBody a log record does
 type Cmd struct {
 	Op  string `protobuf:"bytes,10,opt,name=Op,proto3" json:"Op,omitempty"`
 	Key string `protobuf:"bytes,20,opt,name=Key,proto3" json:"Key,omitempty"`

@@ -3,6 +3,7 @@ package traft
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -196,6 +197,8 @@ func TestTRaft_Vote(t *testing.T) {
 				logs:         RecordsShortStr(reply.Logs),
 			},
 			"%d-th: case: %+v", i+1, c)
+
+		ta.InDelta(int64(uSecond()+leaderLease), t1.Status[id].VoteExpireAt, 1000*1000*1000)
 	}
 }
 
@@ -350,7 +353,7 @@ func TestTRaft_query(t *testing.T) {
 	t1 := trafts[0]
 	t1.initTraft(lid(1, 2), lid(3, 4), []int64{5}, nil, nil, lid(0, id1))
 
-	got := query(t1.actionCh, "logStat", nil).logStat
+	got := query(t1.actionCh, "logStat", nil).v.(*LogStatus)
 	ta.Equal("001#002", got.Committer.ShortStr())
 	ta.Equal("0:20", got.Accepted.ShortStr())
 }
@@ -374,6 +377,29 @@ func readMsg3(ts []*TRaft) string {
 	return msg
 }
 
+func waitForMsg(ts []*TRaft, msgs map[string]int) {
+	for {
+		msg := readMsg3(ts)
+		for s, _ := range msgs {
+			if strings.Contains(msg, s) {
+				msgs[s]--
+				lg.Infow("got-msg", "msg", msg)
+			}
+		}
+
+		all0 := true
+		for _, n := range msgs {
+			all0 = all0 && n == 0
+		}
+
+		lg.Infow("require-msg", "msgs", msgs)
+
+		if all0 {
+			return
+		}
+	}
+}
+
 func TestTRaft_VoteLoop(t *testing.T) {
 
 	ta := require.New(t)
@@ -395,11 +421,18 @@ func TestTRaft_VoteLoop(t *testing.T) {
 		ts[2].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
 
 		go ts[0].VoteLoop()
-		msg := readMsg3(ts)
 
-		ta.Contains(msg, "vote-win VotedFor:<Term:1 Id:1 >")
-		ta.Equal(lid(1, 1), ts[0].Status[1].VotedFor)
-		// TODO check lease: ts[0].Status[1].VoteExpireAt
+		waitForMsg(ts, map[string]int{
+			"vote-win VotedFor:<Term:1 Id:1 >": 1,
+		})
+
+		ta.Equal(lid(1, 1), ts[0].Status[id1].VotedFor)
+		ta.InDelta(int64(uSecond()+leaderLease),
+			ts[0].Status[id1].VoteExpireAt, 1000*1000*1000)
+
+		ta.Equal(lid(1, 1), ts[1].Status[id2].VotedFor)
+		ta.InDelta(int64(uSecond()+leaderLease),
+			ts[1].Status[id2].VoteExpireAt, 1000*1000*1000)
 	})
 
 	t.Run("emptyVoters/candidate-2", func(t *testing.T) {
@@ -411,13 +444,19 @@ func TestTRaft_VoteLoop(t *testing.T) {
 		ts[2].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
 
 		go ts[1].VoteLoop()
-		msg := readMsg3(ts)
+		waitForMsg(ts, map[string]int{
+			"vote-win VotedFor:<Term:1 Id:2 >": 1,
+		})
 
-		ta.Contains(msg, "vote-win VotedFor:<Id:2 >")
-		ta.Equal(lid(0, 2), ts[1].Status[2].VotedFor)
+		ta.Equal(lid(1, 2), ts[1].Status[2].VotedFor)
+
+		ta.InDelta(int64(uSecond()+leaderLease),
+			ts[1].Status[2].VoteExpireAt, 1000*1000*1000)
 	})
+
 	t.Run("emptyVoters/candidate-12", func(t *testing.T) {
 		ta := require.New(t)
+		_ = ta
 		ts := serveCluster(ids)
 		defer stopAll(ts)
 		ts[0].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id1))
@@ -426,13 +465,54 @@ func TestTRaft_VoteLoop(t *testing.T) {
 
 		go ts[0].VoteLoop()
 		go ts[1].VoteLoop()
-		for {
-			msg := readMsg3(ts)
-			fmt.Println("---", msg)
-		}
 
-		// ta.Contains(msg, "vote-win VotedFor:<Id:2 >")
-		ta.Fail("foo")
+		// only one succ to elect.
+		// In 1 second, there wont be another winning election.
+		waitForMsg(ts, map[string]int{
+			"vote-win VotedFor:<Term:1 Id:2 >": 1,
+		})
+	})
+
+	t.Run("emptyVoters/candidate-123", func(t *testing.T) {
+		ta := require.New(t)
+		_ = ta
+		ts := serveCluster(ids)
+		defer stopAll(ts)
+		ts[0].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id1))
+		ts[1].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
+		ts[2].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
+
+		go ts[0].VoteLoop()
+		go ts[1].VoteLoop()
+		go ts[2].VoteLoop()
+
+		// only one succ to elect.
+		// In 1 second, there wont be another winning election.
+		waitForMsg(ts, map[string]int{
+			"vote-win":  1,
+			"vote-fail": 2,
+		})
+	})
+
+	t.Run("id2MaxCommitter", func(t *testing.T) {
+		ta := require.New(t)
+		_ = ta
+		ts := serveCluster(ids)
+		defer stopAll(ts)
+		ts[0].initTraft(lid(2, 1), lid(0, 1), []int64{2}, nil, nil, lid(0, id1))
+		ts[1].initTraft(lid(3, 2), lid(0, 1), []int64{2}, nil, nil, lid(0, id2))
+		ts[2].initTraft(lid(1, 3), lid(0, 1), []int64{2}, nil, nil, lid(0, id3))
+
+		go ts[0].VoteLoop()
+		go ts[1].VoteLoop()
+		go ts[2].VoteLoop()
+
+		// only one succ to elect.
+		// In 1 second, there wont be another winning election.
+		waitForMsg(ts, map[string]int{
+			"vote-win VotedFor:<Term:1 Id:2 >": 1,
+			"vote-fail":                        2,
+		})
 	})
 }
 

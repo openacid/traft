@@ -83,9 +83,9 @@ type TRaft struct {
 
 	// Communication channel with Loop().
 	// Only Loop() modifies state of TRaft.
-	// Other goroutines send an action through this channel and wait for an
+	// Other goroutines send an queryBody through this channel and wait for an
 	// operation reply.
-	actionCh chan *action
+	actionCh chan *queryBody
 
 	// for external component to receive traft state changes.
 	MsgCh chan string
@@ -155,20 +155,21 @@ func buildPseudoLogs(
 	return start, logs
 }
 
-type trRst struct {
+type queryRst struct {
 	logStat    *LogStatus
 	leaderStat *LeaderStatus
 	config     *ClusterConfig
 	voteReply  *VoteReply
 
+	v interface{}
+
 	ok bool
 }
 
-type action struct {
-	act   string
-	arg   interface{}
-	trRst *trRst
-	rstCh chan *trRst
+type queryBody struct {
+	operation string
+	arg       interface{}
+	rstCh     chan *queryRst
 }
 
 // Loop handles actions from other components.
@@ -184,55 +185,53 @@ func (tr *TRaft) Loop() {
 		case <-shutdown:
 			return
 		case a := <-act:
-			switch a.act {
+			switch a.operation {
 			case "logStat":
-				a.rstCh <- &trRst{
-					logStat: ExportLogStatus(tr.Status[id]),
+				a.rstCh <- &queryRst{
+					v: ExportLogStatus(tr.Status[id]),
 				}
 			case "leaderStat":
-				a.rstCh <- &trRst{
-					leaderStat: ExportLeaderStatus(tr.Status[id]),
+				lg.Infow("send-leader", "v", ExportLeaderStatus(tr.Status[id]))
+				a.rstCh <- &queryRst{
+					v: ExportLeaderStatus(tr.Status[id]),
 				}
 			case "config":
-				a.rstCh <- &trRst{
-					config: tr.Config.Clone(),
+				a.rstCh <- &queryRst{
+					v: tr.Config.Clone(),
 				}
 			case "vote":
-				a.rstCh <- &trRst{
-					voteReply: tr.internalVote(a.arg.(*VoteReq)),
+				a.rstCh <- &queryRst{
+					v: tr.internalVote(a.arg.(*VoteReq)),
 				}
 			case "update-leaderStat":
-				leadst := a.trRst.leaderStat
+				leadst := a.arg.(*LeaderStatus)
 				me := tr.Status[id]
 				if leadst.VotedFor.Cmp(me.VotedFor) >= 0 {
 					me.VotedFor = leadst.VotedFor.Clone()
 					me.VoteExpireAt = leadst.VoteExpireAt
-					a.rstCh <- &trRst{ok: true}
+					a.rstCh <- &queryRst{ok: true}
 				} else {
-					a.rstCh <- &trRst{ok: false}
+					a.rstCh <- &queryRst{ok: false}
 				}
 			}
 		}
 	}
 }
 
-func query(actCh chan<- *action, act string, arg interface{}) *trRst {
-	rstCh := make(chan *trRst)
-	actCh <- &action{act, arg, nil, rstCh}
+// For other goroutine to ask mainloop to query/update
+func query(queryCh chan<- *queryBody, operation string, arg interface{}) *queryRst {
+	rstCh := make(chan *queryRst)
+	queryCh <- &queryBody{operation, arg, rstCh}
 	rst := <-rstCh
-	// lg.Infow("chan-query", "act", act, "rst", rst)
-	fmt.Println("chan-query", "act", act, "rst", rst)
+	lg.Infow("chan-query",
+		"operation", operation,
+		"arg", arg,
+		"rst.ok", rst.ok,
+		"rst.v", toStr(rst.v))
 	return rst
 }
 
-func update(actCh chan<- *action, act string, rst *trRst) *trRst {
-	rstCh := make(chan *trRst)
-	actCh <- &action{act, nil, rst, rstCh}
-	ok := <-rstCh
-	lg.Infow("chan-update", "act", act, "arg", rst, "ok", ok)
-	return ok
-
-}
+var leaderLease = int64(time.Second * 1)
 
 // run forever to elect itself as leader if there is no leader in this cluster.
 func (tr *TRaft) VoteLoop() {
@@ -241,6 +240,7 @@ func (tr *TRaft) VoteLoop() {
 	act := tr.actionCh
 
 	running := true
+	id := tr.Id
 
 	// return true if shutting down
 	slp := func(sleep time.Duration) {
@@ -252,7 +252,6 @@ func (tr *TRaft) VoteLoop() {
 		}
 	}
 
-	leaderLease := int64(time.Second * 1)
 	// maxStaleTermSleep := time.Millisecond * 10
 	// heartBeatSleep := time.Millisecond * 10
 	// followerSleep := time.Millisecond * 10
@@ -261,7 +260,7 @@ func (tr *TRaft) VoteLoop() {
 	heartBeatSleep := time.Millisecond * 200
 	followerSleep := time.Millisecond * 200
 
-	leadst := query(act, "leaderStat", nil).leaderStat
+	leadst := query(act, "leaderStat", nil).v.(*LeaderStatus)
 	for running {
 
 		now := uSecond()
@@ -270,7 +269,10 @@ func (tr *TRaft) VoteLoop() {
 		// heartbeat.
 		if now < leadst.VoteExpireAt {
 
-			lg.Infow("not expired", "id", tr.Id, "VotedFor", leadst.VotedFor, "leadst.VoteExpireAt-now", leadst.VoteExpireAt-now)
+			lg.Infow("leader-not-expired",
+				"Id", tr.Id,
+				"VotedFor", leadst.VotedFor,
+				"leadst.VoteExpireAt-now", leadst.VoteExpireAt-now)
 
 			if leadst.VotedFor.Id == tr.Id {
 				// I am a leader
@@ -280,20 +282,40 @@ func (tr *TRaft) VoteLoop() {
 				slp(followerSleep)
 			}
 
-			leadst = query(act, "leaderStat", nil).leaderStat
+			leadst = query(act, "leaderStat", nil).v.(*LeaderStatus)
 			continue
 		}
 
 		// call for a new leader!!!
+		lg.Infow("leader-expired",
+			"Id", tr.Id,
+			"VotedFor", leadst.VotedFor,
+			"leadst.VoteExpireAt-now", leadst.VoteExpireAt-now)
 
-		logst := query(act, "logStat", nil).logStat
-		config := query(act, "config", nil).config
+		logst := query(act, "logStat", nil).v.(*LogStatus)
+		config := query(act, "config", nil).v.(*ClusterConfig)
 
 		// vote myself
 		leadst.VotedFor.Term++
 		leadst.VotedFor.Id = tr.Id
 
-		tr.sendMsg("vote-start", leadst, logst)
+		{
+			// update local vote first
+			ok := query(act, "update-leaderStat", leadst).ok
+			if !ok {
+				// voted for other replica
+				leadst = query(act, "leaderStat", nil).v.(*LeaderStatus)
+				lg.Infow("reload-leader",
+					"Id", id,
+					"leadst.VotedFor", leadst.VotedFor,
+					"leadst.VoteExpireAt", leadst.VoteExpireAt,
+				)
+				continue
+			}
+		}
+
+		tr.sendMsg("vote-start", leadst.VotedFor.ShortStr(), logst)
+
 		voted, err, higher := VoteOnce(
 			leadst.VotedFor,
 			logst,
@@ -304,36 +326,39 @@ func (tr *TRaft) VoteLoop() {
 
 		if voted {
 			leadst.VoteExpireAt = uSecond() + leaderLease
+			lg.Infow("to-update-leader", "leadst", leadst.VoteExpireAt)
 			// TODO: when update, the stat may already changed!!
-			ok := update(act, "update-leaderStat", &trRst{
-				leaderStat: leadst,
-			}).ok
+			ok := query(act, "update-leaderStat", leadst).ok
 
 			if ok {
 				tr.sendMsg("vote-win", leadst)
 				slp(heartBeatSleep)
-				continue
 			} else {
-				tr.sendMsg("vote-update-failure", leadst)
-				leadst = query(act, "leaderStat", nil).leaderStat
-				continue
+				tr.sendMsg("vote-fail", "reason:fail-to-update", leadst)
+				leadst = query(act, "leaderStat", nil).v.(*LeaderStatus)
+				lg.Infow("reload-leader",
+					"Id", id,
+					"leadst.VotedFor", leadst.VotedFor,
+					"leadst.VoteExpireAt", leadst.VoteExpireAt,
+				)
 			}
+			continue
+		}
 
-		} else {
-			switch errors.Cause(err) {
-			case ErrStaleTermId:
-				slp(time.Millisecond*5 + time.Duration(rand.Int63n(int64(maxStaleTermSleep))))
-				leadst.VotedFor.Term = higher + 1
-				continue
-			case ErrTimeout:
-				slp(time.Millisecond * 10)
-				continue
-			case ErrStaleLog:
-				// I can not be the leader.
-				// sleep a day. waiting for others to elect to be a leader.
-				slp(time.Second * 86400)
-				continue
-			}
+		tr.sendMsg("vote-fail", "reason:no-quorum", leadst)
+
+		// not voted
+
+		switch errors.Cause(err) {
+		case ErrStaleTermId:
+			slp(time.Millisecond*5 + time.Duration(rand.Int63n(int64(maxStaleTermSleep))))
+			leadst.VotedFor.Term = higher + 1
+		case ErrTimeout:
+			slp(time.Millisecond * 10)
+		case ErrStaleLog:
+			// I can not be the leader.
+			// sleep a day. waiting for others to elect to be a leader.
+			slp(time.Second * 86400)
 		}
 	}
 }
@@ -359,32 +384,27 @@ func VoteOnce(
 		Accepted:  logStatus.GetAccepted(),
 	}
 
-	type voteRes struct {
+	type voteRst struct {
 		from  *ReplicaInfo
 		reply *VoteReply
+		err   error
 	}
 
-	ch := make(chan *voteRes)
+	ch := make(chan *voteRst)
 
 	for _, rinfo := range config.Members {
 		if rinfo.Id == id {
 			continue
 		}
 
-		go func(rinfo ReplicaInfo, ch chan *voteRes) {
+		go func(rinfo ReplicaInfo, ch chan *voteRst) {
 			rpcTo(rinfo.Addr, func(cli TRaftClient, ctx context.Context) {
 
-				lg.Infow("send", "addr", rinfo.Addr)
+				lg.Infow("grpc-send-req", "addr", rinfo.Addr)
 				reply, err := cli.Vote(ctx, req)
-				lg.Infow("recv", "from", rinfo, "reply", reply, "err", err)
+				lg.Infow("grpc-recv-reply", "from", rinfo, "reply", reply, "err", err)
 
-				_ = reply
-				if err != nil {
-					// TODO
-					panic("wtf")
-				}
-
-				ch <- &voteRes{&rinfo, reply}
+				ch <- &voteRst{&rinfo, reply, err}
 			})
 		}(*rinfo, ch)
 	}
@@ -399,9 +419,15 @@ func VoteOnce(
 	for waitingFor > 0 {
 		select {
 		case res := <-ch:
-			repl := res.reply
 
-			lg.Infow("got res", "res", res)
+			lg.Infow("got res", "res.reply", res.reply, "res.err", res.err)
+
+			if res.err != nil {
+				waitingFor--
+				continue
+			}
+
+			repl := res.reply
 
 			if repl.VotedFor.Equal(candidate) {
 				// vote granted
@@ -488,7 +514,7 @@ func (tr *TRaft) AddLog(cmd *Cmd) *Record {
 }
 
 func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
-	repl := query(tr.actionCh, "vote", req).voteReply
+	repl := query(tr.actionCh, "vote", req).v.(*VoteReply)
 	return repl, nil
 }
 
@@ -537,6 +563,7 @@ func (tr *TRaft) internalVote(req *VoteReq) *VoteReply {
 
 	// grant vote
 	me.VotedFor = req.Candidate.Clone()
+	me.VoteExpireAt = uSecond() + leaderLease
 	repl.VotedFor = req.Candidate.Clone()
 
 	lg.Infow("voted", "id", id, "VotedFor", me.VotedFor)
@@ -563,10 +590,10 @@ func (tr *TRaft) internalVote(req *VoteReq) *VoteReply {
 // func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 
 //     id := tr.Id
-//     act := tr.actionCh
+//     operation := tr.actionCh
 
-//     leadst := query(act, "leaderStat").leaderStat
-//     logst := query(act, "logStat").logStat
+//     leadst := query(operation, "leaderStat").leaderStat
+//     logst := query(operation, "logStat").logStat
 
 //     // A vote reply just send back a voter's status.
 //     // It is the candidate's responsibility to check if a voter granted it.
@@ -595,7 +622,7 @@ func (tr *TRaft) internalVote(req *VoteReq) *VoteReply {
 //     // grant vote
 //     leaderLease := int64(time.Second * 1)
 //     leadst.VoteExpireAt = uSecond() + leaderLease
-//     update(act, "update-leaderStat", &trRst{
+//     update(operation, "update-leaderStat", &rst{
 //         leaderStat: leadst,
 //     })
 //     repl.VotedFor = req.Candidate.Clone()
