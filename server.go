@@ -221,6 +221,8 @@ func (tr *TRaft) Loop() {
 					a.rstCh <- &queryRst{ok: false}
 				}
 			case "update_leaderAndLog":
+				// TODO rename this operation
+
 				lal := a.arg.(*leaderAndVotes)
 				leadst := lal.leaderStat
 				votes := lal.votes
@@ -232,6 +234,23 @@ func (tr *TRaft) Loop() {
 					me.VoteExpireAt = leadst.VoteExpireAt
 
 					tr.internalMergeLogs(votes)
+					// TODO update Committer to this replica
+					// then going on replicating these logs to others.
+					//
+					// TODO update local view of status of other replicas.
+					for _, v := range votes {
+						if v.Committer.Equal(me.Committer) {
+							tr.Status[v.Id].Accepted = v.Accepted.Clone()
+						} else {
+							// if committers are different, the leader can no be
+							// sure whether a follower has identical logs
+							tr.Status[v.Id].Accepted = v.Committed.Clone()
+						}
+						tr.Status[v.Id].Committed = v.Committed.Clone()
+
+						tr.Status[v.Id].Committer = v.Committer
+					}
+					me.Committer = leadst.VotedFor.Clone()
 					a.rstCh <- &queryRst{ok: true}
 				} else {
 					a.rstCh <- &queryRst{ok: false}
@@ -243,6 +262,16 @@ func (tr *TRaft) Loop() {
 
 // find the max committer log to fill in local log holes.
 func (tr *TRaft) internalMergeLogs(votes []*VoteReply) {
+
+	// TODO if the leader chose Logs[i] from replica `r`, e.g. R[r].Logs[i]
+	// then the logs R[r].Logs[:i] are safe to choose.
+	// Because if a different R[r'].Logs[j] is committed, for a j <= i
+	// the leader that written R[r].Log[i] must have chosen R[r'].Logs[j] .
+	// ∴ R[r].Logs[j] == R[r'].Logs[j]
+	//
+	// For now 2021 Feb 14,
+	// we just erase all non-committed logs on followers.
+
 	id := tr.Id
 	me := tr.Status[id]
 
@@ -254,23 +283,29 @@ func (tr *TRaft) internalMergeLogs(votes []*VoteReply) {
 
 		maxCommitter := NewLeaderId(0, 0)
 		var maxRec *Record
+		// var isCommitted bool
 		for _, vr := range votes {
 			r := vr.PopRecord(i)
 			fmt.Println("lsn:", i, "r:", r.ShortStr())
-			if r != nil {
+			if r == nil {
+				continue
+			}
 
-				cmpRst := maxCommitter.Cmp(vr.Committer)
-				if cmpRst == 0 {
-					if !maxRec.Equal(r) {
-						panic("wtf: same committer different log")
-					}
-				}
-
-				if cmpRst < 0 {
-					maxCommitter = vr.Committer
-					maxRec = r
+			cmpRst := maxCommitter.Cmp(vr.Committer)
+			if cmpRst == 0 {
+				if !maxRec.Equal(r) {
+					panic("wtf: same committer different log")
 				}
 			}
+
+			if cmpRst < 0 {
+				maxCommitter = vr.Committer
+				maxRec = r
+			}
+
+			// if !isCommitted && vr.Committed.Get(i) != 0 {
+			//     isCommitted = true
+			// }
 		}
 
 		if maxRec == nil {
@@ -279,6 +314,9 @@ func (tr *TRaft) internalMergeLogs(votes []*VoteReply) {
 
 		tr.Logs[i-tr.LogOffset] = maxRec
 		me.Accepted.Set(i)
+		// if isCommitted {
+		//     me.Committed.Set(i)
+		// }
 
 		lg.Infow("merge-log",
 			"lsn", i,
@@ -606,9 +644,11 @@ func (tr *TRaft) internalVote(req *VoteReq) *VoteReply {
 	// A vote reply just send back a voter's status.
 	// It is the candidate's responsibility to check if a voter granted it.
 	repl := &VoteReply{
+		Id:        id,
 		VotedFor:  me.VotedFor.Clone(),
 		Committer: me.Committer.Clone(),
 		Accepted:  me.Accepted.Clone(),
+		Committed: me.Committed.Clone(),
 	}
 
 	lg.Infow("handleVoteReq", "Id", id, "me.VotedFor", me.VotedFor, "req.Candidate", req.Candidate)

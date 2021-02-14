@@ -546,18 +546,19 @@ func TestTRaft_VoteLoop(t *testing.T) {
 
 		ts[0].initTraft(lid(2, 0), lid(1, 1), []int64{0, 2}, nil, nil, lid(0, 0))
 		ts[1].initTraft(lid(3, 1), lid(1, 1), []int64{0, 4}, nil, nil, lid(0, 1))
-		ts[2].initTraft(lid(1, 2), lid(2, 1), []int64{0, 3}, nil, nil, lid(0, 2))
+		ts[2].initTraft(lid(1, 2), lid(2, 1), []int64{0, 3}, nil, []int64{0}, lid(0, 2))
 		// ts[3].initTraft(lid(1, 2), lid(1, 1), []int64{0, 2, 3}, nil, nil, lid(0, 3))
 		// ts[4].initTraft(lid(1, 2), lid(1, 1), []int64{0, 2, 3}, nil, nil, lid(0, 4))
 
 		ts[3].Stop()
 		ts[4].Stop()
+		ts[1].Status[1].VotedFor = NewLeaderId(3, 1)
 		go ts[1].VoteLoop()
 
 		// only one succ to elect.
 		// In 1 second, there wont be another winning election.
 		waitForMsg(ts, map[string]int{
-			"vote-win VotedFor:<Term:1 Id:1 >": 1,
+			"vote-win VotedFor:<Term:4 Id:1 >": 1,
 		})
 
 		ta.Equal(
@@ -568,6 +569,20 @@ func TestTRaft_VoteLoop(t *testing.T) {
 				"<001#001:004{set(x, 4)}-0→0>]"),
 			RecordsShortStr(ts[1].Logs, ""),
 		)
+
+		ta.Equal(NewLeaderId(4, 1), ts[1].Status[1].Committer)
+		ta.Equal(NewTailBitmap(0, 0, 2, 3, 4), ts[1].Status[1].Accepted)
+		ta.Equal(NewTailBitmap(0), ts[1].Status[1].Committed)
+
+		ta.Equal(NewLeaderId(2, 0), ts[1].Status[0].Committer)
+		// using Equal to avoid comparison between nil and []int64{}
+		ta.True(NewTailBitmap(0).Equal(ts[1].Status[0].Accepted))
+		ta.True(NewTailBitmap(0).Equal(ts[1].Status[0].Committed))
+
+		ta.Equal(NewLeaderId(1, 2), ts[1].Status[2].Committer)
+		// reduced Accepted to Committed
+		ta.Equal(NewTailBitmap(0, 0), ts[1].Status[2].Accepted)
+		ta.Equal(NewTailBitmap(0, 0), ts[1].Status[2].Committed)
 	})
 }
 

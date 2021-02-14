@@ -89,6 +89,9 @@ func (tb *TailBitmap) Get(idx int64) uint64 {
 	}
 
 	idx = idx - tb.Offset
+	if int(idx>>6) >= len(tb.Words) {
+		return 0
+	}
 	return tb.Words[idx>>6] & bitmap.Bit[idx&63]
 }
 

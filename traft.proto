@@ -213,6 +213,9 @@ message VoteReq {
 }
 
 message VoteReply {
+    // the replica id this reply comes from
+    int64 Id = 1;
+
     // voter's term.
     // If voter's term is greater, sender should upgrade its own term and retry.
 
@@ -231,7 +234,9 @@ message VoteReply {
     LeaderId Committer = 4;
 
     // what logs I have.
-    TailBitmap Accepted = 1;
+    TailBitmap Accepted = 21;
+
+    TailBitmap Committed = 22;
 
     // The logs that voter has but leader candidate does not have.
     // For the leader to rebuild all possibly committed logs from a quorum.
