@@ -122,8 +122,14 @@ func (tr *TRaft) Stop() {
 	lg.Infow("Stopping grpc")
 	tr.grpcServer.Stop()
 
+	if tr.stopped {
+		lg.Infow("TRaft already stopped")
+		return
+	}
+
 	lg.Infow("close shutdown")
 	close(tr.shutdown)
+	tr.stopped = true
 
 	tr.wg.Wait()
 

@@ -3,6 +3,7 @@ package traft
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -238,7 +239,7 @@ func TestTRaft_VoteOnce(t *testing.T) {
 			t1.Config.Clone(),
 		)
 
-		ta.False(voted)
+		ta.Nil(voted)
 		ta.Equal(ErrStaleTermId, errors.Cause(err))
 		ta.Equal(int64(0), higher)
 	})
@@ -254,7 +255,7 @@ func TestTRaft_VoteOnce(t *testing.T) {
 			t1.Config.Clone(),
 		)
 
-		ta.True(voted)
+		ta.NotNil(voted)
 		ta.Nil(err)
 		ta.Equal(int64(-1), higher)
 	})
@@ -269,7 +270,7 @@ func TestTRaft_VoteOnce(t *testing.T) {
 			t1.Config.Clone(),
 		)
 
-		ta.True(voted)
+		ta.NotNil(voted)
 		ta.Nil(err)
 		ta.Equal(int64(-1), higher)
 	})
@@ -284,7 +285,7 @@ func TestTRaft_VoteOnce(t *testing.T) {
 			t1.Config.Clone(),
 		)
 
-		ta.True(voted)
+		ta.NotNil(voted)
 		ta.Nil(err)
 		ta.Equal(int64(-1), higher)
 	})
@@ -299,7 +300,7 @@ func TestTRaft_VoteOnce(t *testing.T) {
 			t1.Config.Clone(),
 		)
 
-		ta.False(voted)
+		ta.Nil(voted)
 		ta.Equal(ErrStaleLog, errors.Cause(err))
 		ta.Equal(int64(-1), higher)
 	})
@@ -314,7 +315,7 @@ func TestTRaft_VoteOnce(t *testing.T) {
 			t1.Config.Clone(),
 		)
 
-		ta.False(voted)
+		ta.Nil(voted)
 		ta.Equal(ErrStaleLog, errors.Cause(err))
 		ta.Equal(int64(5), higher)
 	})
@@ -329,7 +330,7 @@ func TestTRaft_VoteOnce(t *testing.T) {
 			t1.Config.Clone(),
 		)
 
-		ta.False(voted)
+		ta.Nil(voted)
 		ta.Equal(ErrStaleTermId, errors.Cause(err))
 		ta.Equal(int64(5), higher)
 	})
@@ -365,14 +366,33 @@ func stopAll(ts []*TRaft) {
 }
 
 func readMsg3(ts []*TRaft) string {
-	var msg string
-	select {
-	case msg = <-ts[0].MsgCh:
-	case msg = <-ts[1].MsgCh:
-	case msg = <-ts[2].MsgCh:
-	case <-time.After(time.Second):
+
+	// n traft and a timeout
+	cases := make([]reflect.SelectCase, len(ts)+1)
+	for i, t := range ts {
+		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(t.MsgCh)}
+	}
+	cases[len(ts)] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(time.Second))}
+
+	chosen, value, ok := reflect.Select(cases)
+	// ok will be true if the channel has not been closed.
+	if chosen == len(ts) {
 		panic("timeout")
 	}
+
+	_ = ok
+
+	// t := ts[chosen]
+	msg := value.String()
+
+	// var msg string
+	// select {
+	// case msg = <-ts[0].MsgCh:
+	// case msg = <-ts[1].MsgCh:
+	// case msg = <-ts[2].MsgCh:
+	// case <-time.After(time.Second):
+	//     panic("timeout")
+	// }
 
 	return msg
 }
@@ -513,6 +533,41 @@ func TestTRaft_VoteLoop(t *testing.T) {
 			"vote-win VotedFor:<Term:1 Id:2 >": 1,
 			"vote-fail":                        2,
 		})
+	})
+
+	t.Run("id2MaxLog", func(t *testing.T) {
+		// we need 5 replica to collect different log from 2 replica
+		ta := require.New(t)
+		_ = ta
+
+		ids := []int64{0, 1, 2, 3, 4}
+		ts := serveCluster(ids)
+		defer stopAll(ts)
+
+		ts[0].initTraft(lid(2, 0), lid(1, 1), []int64{0, 2}, nil, nil, lid(0, 0))
+		ts[1].initTraft(lid(3, 1), lid(1, 1), []int64{0, 4}, nil, nil, lid(0, 1))
+		ts[2].initTraft(lid(1, 2), lid(2, 1), []int64{0, 3}, nil, nil, lid(0, 2))
+		// ts[3].initTraft(lid(1, 2), lid(1, 1), []int64{0, 2, 3}, nil, nil, lid(0, 3))
+		// ts[4].initTraft(lid(1, 2), lid(1, 1), []int64{0, 2, 3}, nil, nil, lid(0, 4))
+
+		ts[3].Stop()
+		ts[4].Stop()
+		go ts[1].VoteLoop()
+
+		// only one succ to elect.
+		// In 1 second, there wont be another winning election.
+		waitForMsg(ts, map[string]int{
+			"vote-win VotedFor:<Term:1 Id:1 >": 1,
+		})
+
+		ta.Equal(
+			join("[<001#001:000{set(x, 0)}-0→0>",
+				"<>",
+				"<001#001:002{set(x, 2)}-0→0>",
+				"<002#001:003{set(x, 3)}-0→0>",
+				"<001#001:004{set(x, 4)}-0→0>]"),
+			RecordsShortStr(ts[1].Logs, ""),
+		)
 	})
 }
 

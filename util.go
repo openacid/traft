@@ -3,6 +3,7 @@ package traft
 import (
 	context "context"
 	"fmt"
+	"strings"
 	"time"
 
 	grpc "google.golang.org/grpc"
@@ -21,6 +22,10 @@ func cmpI64(a, b int64) int {
 func uSecond() int64 {
 	now := time.Now()
 	return int64(now.Unix())*1000*1000*1000 + int64(now.Nanosecond())
+}
+
+func join(ss ...string) string {
+	return strings.Join(ss, "")
 }
 
 var basePort = int64(5500)

@@ -45,11 +45,15 @@ func (r *Record) ShortStr() string {
 	)
 }
 
-func RecordsShortStr(rs []*Record) string {
+func RecordsShortStr(rs []*Record, sep ...string) string {
+	s := ", "
+	if len(sep) > 0 {
+		s = sep[0]
+	}
 	rst := []string{}
 	for _, r := range rs {
 		rst = append(rst, r.ShortStr())
 	}
-	return "[" + strings.Join(rst, ", ") + "]"
+	return "[" + strings.Join(rst, s) + "]"
 
 }
