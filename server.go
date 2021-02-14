@@ -18,9 +18,9 @@ import (
 )
 
 var (
-	ErrStaleLog  = errors.New("local log is stale")
-	ErrStaleTerm = errors.New("local Term is stale")
-	ErrTimeout   = errors.New("timeout")
+	ErrStaleLog    = errors.New("local log is stale")
+	ErrStaleTermId = errors.New("local Term-Id is stale")
+	ErrTimeout     = errors.New("timeout")
 )
 
 var (
@@ -32,7 +32,8 @@ func init() {
 	// if os.Getenv("CLUSTER_DEBUG") != "" {
 	// }
 	var err error
-	llg, err = zap.NewProduction()
+	// llg, err = zap.NewProduction()
+	llg, err = zap.NewDevelopment()
 	if err != nil {
 		panic(err)
 	}
@@ -85,6 +86,9 @@ type TRaft struct {
 	// Other goroutines send an action through this channel and wait for an
 	// operation reply.
 	actionCh chan *action
+
+	// for external component to receive traft state changes.
+	MsgCh chan string
 
 	grpcServer *grpc.Server
 
@@ -155,19 +159,23 @@ type trRst struct {
 	logStat    *LogStatus
 	leaderStat *LeaderStatus
 	config     *ClusterConfig
+	voteReply  *VoteReply
 
 	ok bool
 }
 
 type action struct {
 	act   string
+	arg   interface{}
 	trRst *trRst
 	rstCh chan *trRst
 }
 
 // Loop handles actions from other components.
-func (tr *TRaft) Loop(shutdown <-chan struct{}, act <-chan *action) {
-	defer tr.wg.Done()
+func (tr *TRaft) Loop() {
+
+	shutdown := tr.shutdown
+	act := tr.actionCh
 
 	id := tr.Id
 
@@ -189,53 +197,72 @@ func (tr *TRaft) Loop(shutdown <-chan struct{}, act <-chan *action) {
 				a.rstCh <- &trRst{
 					config: tr.Config.Clone(),
 				}
+			case "vote":
+				a.rstCh <- &trRst{
+					voteReply: tr.internalVote(a.arg.(*VoteReq)),
+				}
 			case "update-leaderStat":
 				leadst := a.trRst.leaderStat
-				tr.Status[id].VotedFor = leadst.VotedFor.Clone()
-				tr.Status[id].VoteExpireAt = leadst.VoteExpireAt
-				a.rstCh <- &trRst{ok: true}
+				me := tr.Status[id]
+				if leadst.VotedFor.Cmp(me.VotedFor) >= 0 {
+					me.VotedFor = leadst.VotedFor.Clone()
+					me.VoteExpireAt = leadst.VoteExpireAt
+					a.rstCh <- &trRst{ok: true}
+				} else {
+					a.rstCh <- &trRst{ok: false}
+				}
 			}
 		}
 	}
 }
 
-func query(actCh chan<- *action, act string) *trRst {
+func query(actCh chan<- *action, act string, arg interface{}) *trRst {
 	rstCh := make(chan *trRst)
-	actCh <- &action{act, nil, rstCh}
+	actCh <- &action{act, arg, nil, rstCh}
 	rst := <-rstCh
+	// lg.Infow("chan-query", "act", act, "rst", rst)
+	fmt.Println("chan-query", "act", act, "rst", rst)
 	return rst
 }
 
 func update(actCh chan<- *action, act string, rst *trRst) *trRst {
 	rstCh := make(chan *trRst)
-	actCh <- &action{act, rst, rstCh}
+	actCh <- &action{act, nil, rst, rstCh}
 	ok := <-rstCh
+	lg.Infow("chan-update", "act", act, "arg", rst, "ok", ok)
 	return ok
 
 }
 
 // run forever to elect itself as leader if there is no leader in this cluster.
-func (tr *TRaft) VoteLoop(shutdown <-chan struct{}, act chan<- *action) {
-	defer tr.wg.Done()
+func (tr *TRaft) VoteLoop() {
+
+	shutdown := tr.shutdown
+	act := tr.actionCh
+
+	running := true
 
 	// return true if shutting down
-	slp := func(sleep time.Duration) bool {
+	slp := func(sleep time.Duration) {
 		select {
 		case <-time.After(sleep):
-			lg.Infow("VoteLoop woke up")
-			return false
+			// lg.Infow("VoteLoop woke up")
 		case <-shutdown:
-			return true
+			running = false
 		}
 	}
 
 	leaderLease := int64(time.Second * 1)
-	maxStaleTermSleep := time.Millisecond * 10
-	heartBeatSleep := time.Millisecond * 10
-	followerSleep := time.Millisecond * 10
+	// maxStaleTermSleep := time.Millisecond * 10
+	// heartBeatSleep := time.Millisecond * 10
+	// followerSleep := time.Millisecond * 10
 
-	leadst := query(act, "leaderStat").leaderStat
-	for {
+	maxStaleTermSleep := time.Millisecond * 200
+	heartBeatSleep := time.Millisecond * 200
+	followerSleep := time.Millisecond * 200
+
+	leadst := query(act, "leaderStat", nil).leaderStat
+	for running {
 
 		now := uSecond()
 
@@ -243,61 +270,68 @@ func (tr *TRaft) VoteLoop(shutdown <-chan struct{}, act chan<- *action) {
 		// heartbeat.
 		if now < leadst.VoteExpireAt {
 
+			lg.Infow("not expired", "id", tr.Id, "VotedFor", leadst.VotedFor, "leadst.VoteExpireAt-now", leadst.VoteExpireAt-now)
+
 			if leadst.VotedFor.Id == tr.Id {
 				// I am a leader
 				// TODO heartbeat other replicas to keep leadership
-				if slp(heartBeatSleep) {
-					return
-				}
+				slp(heartBeatSleep)
 			} else {
-				if slp(followerSleep) {
-					return
-				}
+				slp(followerSleep)
 			}
-			leadst = query(act, "leaderStat").leaderStat
+
+			leadst = query(act, "leaderStat", nil).leaderStat
 			continue
 		}
 
 		// call for a new leader!!!
 
-		logst := query(act, "logStat").logStat
-		config := query(act, "config").config
+		logst := query(act, "logStat", nil).logStat
+		config := query(act, "config", nil).config
 
+		// vote myself
+		leadst.VotedFor.Term++
+		leadst.VotedFor.Id = tr.Id
+
+		tr.sendMsg("vote-start", leadst, logst)
 		voted, err, higher := VoteOnce(
 			leadst.VotedFor,
 			logst,
 			config,
 		)
 
+		lg.Infow("vote result", "voted", voted, "err", err, "higher", higher)
+
 		if voted {
 			leadst.VoteExpireAt = uSecond() + leaderLease
-			update(act, "update-leaderStat", &trRst{
+			// TODO: when update, the stat may already changed!!
+			ok := update(act, "update-leaderStat", &trRst{
 				leaderStat: leadst,
-			})
+			}).ok
 
-			if slp(heartBeatSleep) {
-				return
+			if ok {
+				tr.sendMsg("vote-win", leadst)
+				slp(heartBeatSleep)
+				continue
+			} else {
+				tr.sendMsg("vote-update-failure", leadst)
+				leadst = query(act, "leaderStat", nil).leaderStat
+				continue
 			}
 
 		} else {
 			switch errors.Cause(err) {
-			case ErrStaleTerm:
-				if slp(time.Millisecond*5 + time.Duration(rand.Int63n(int64(maxStaleTermSleep)))) {
-					return
-				}
+			case ErrStaleTermId:
+				slp(time.Millisecond*5 + time.Duration(rand.Int63n(int64(maxStaleTermSleep))))
 				leadst.VotedFor.Term = higher + 1
 				continue
 			case ErrTimeout:
-				if slp(time.Millisecond * 10) {
-					return
-				}
+				slp(time.Millisecond * 10)
 				continue
 			case ErrStaleLog:
 				// I can not be the leader.
 				// sleep a day. waiting for others to elect to be a leader.
-				if slp(time.Second * 86400) {
-					return
-				}
+				slp(time.Second * 86400)
 				continue
 			}
 		}
@@ -306,7 +340,7 @@ func (tr *TRaft) VoteLoop(shutdown <-chan struct{}, act chan<- *action) {
 
 // returns:
 // voted or not
-// error: ErrStaleLog, ErrStaleTerm, ErrTimeout
+// error: ErrStaleLog, ErrStaleTermId, ErrTimeout
 // higherTerm: if seen, upgrade term and retry
 func VoteOnce(
 	candidate *LeaderId,
@@ -377,9 +411,8 @@ func VoteOnce(
 					return true, nil, -1
 				}
 			} else {
-				rTerm := repl.VotedFor.Term
-				if rTerm > candidate.Term {
-					higherTerm = util.MaxI64(higherTerm, rTerm)
+				if repl.VotedFor.Cmp(candidate) > 0 {
+					higherTerm = util.MaxI64(higherTerm, repl.VotedFor.Term)
 				}
 
 				if CmpLogStatus(repl, logStatus) > 0 {
@@ -406,7 +439,7 @@ func VoteOnce(
 		return false, logErr, higherTerm
 	}
 
-	err := errors.Wrapf(ErrStaleTerm, "seen a higher term:%d", higherTerm)
+	err := errors.Wrapf(ErrStaleTermId, "seen a higher term:%d", higherTerm)
 	return false, err, higherTerm
 }
 
@@ -455,6 +488,14 @@ func (tr *TRaft) AddLog(cmd *Cmd) *Record {
 }
 
 func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
+	repl := query(tr.actionCh, "vote", req).voteReply
+	return repl, nil
+}
+
+// no lock protect, must be called by TRaft.Loop()
+func (tr *TRaft) internalVote(req *VoteReq) *VoteReply {
+
+	id := tr.Id
 
 	me := tr.Status[tr.Id]
 
@@ -466,10 +507,18 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 		Accepted:  me.Accepted.Clone(),
 	}
 
+	lg.Infow("handleVoteReq", "Id", id, "me.VotedFor", me.VotedFor, "req.Candidate", req.Candidate)
+
 	if CmpLogStatus(req, me) < 0 {
 		// I have more logs than the candidate.
 		// It cant be a leader.
-		return repl, nil
+		tr.sendMsg("vote-reject-by-logstat",
+			"me.Committer", me.Committer,
+			"me.Accepted", me.Accepted,
+			"req.Committer", req.Committer,
+			"req.Accepted", req.Accepted,
+		)
+		return repl
 	}
 
 	// candidate has the upto date logs.
@@ -479,12 +528,19 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 		// I've voted for other leader with higher privilege.
 		// This candidate could not be a legal leader.
 		// just send back enssential info to info it.
-		return repl, nil
+		tr.sendMsg("vote-reject-by-term-id",
+			"me.VotedFor", me.VotedFor,
+			"req.Candidate", req.Candidate,
+		)
+		return repl
 	}
 
 	// grant vote
 	me.VotedFor = req.Candidate.Clone()
 	repl.VotedFor = req.Candidate.Clone()
+
+	lg.Infow("voted", "id", id, "VotedFor", me.VotedFor)
+	tr.sendMsg("voted", "VotedFor", me.VotedFor)
 
 	// send back the logs I have but the candidate does not.
 
@@ -500,10 +556,70 @@ func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 
 	repl.Logs = logs
 
-	return repl, nil
+	return repl
 }
 
+// async-version:
+// func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
+
+//     id := tr.Id
+//     act := tr.actionCh
+
+//     leadst := query(act, "leaderStat").leaderStat
+//     logst := query(act, "logStat").logStat
+
+//     // A vote reply just send back a voter's status.
+//     // It is the candidate's responsibility to check if a voter granted it.
+//     repl := &VoteReply{
+//         VotedFor:  leadst.VotedFor,
+//         Committer: logst.Committer,
+//         Accepted:  logst.Accepted,
+//     }
+
+//     if CmpLogStatus(req, logst) < 0 {
+//         // I have more logs than the candidate.
+//         // It cant be a leader.
+//         return repl, nil
+//     }
+
+//     // candidate has the upto date logs.
+
+//     r := req.Candidate.Cmp(leadst.VotedFor)
+//     if r < 0 {
+//         // I've voted for other leader with higher privilege.
+//         // This candidate could not be a legal leader.
+//         // just send back enssential info to info it.
+//         return repl, nil
+//     }
+
+//     // grant vote
+//     leaderLease := int64(time.Second * 1)
+//     leadst.VoteExpireAt = uSecond() + leaderLease
+//     update(act, "update-leaderStat", &trRst{
+//         leaderStat: leadst,
+//     })
+//     repl.VotedFor = req.Candidate.Clone()
+
+//     // send back the logs I have but the candidate does not.
+
+//     logs := make([]*Record, 0)
+
+//     start := me.Accepted.Offset
+//     end := me.Accepted.Len()
+//     for i := start; i < end; i++ {
+//         if me.Accepted.Get(i) != 0 && req.Accepted.Get(i) == 0 {
+//             logs = append(logs, tr.Logs[i-tr.LogOffset])
+//         }
+//     }
+
+//     repl.Logs = logs
+
+//     return repl, nil
+// }
+
 func (tr *TRaft) Replicate(ctx context.Context, req *ReplicateReq) (*ReplicateReply, error) {
+
+	// TODO use query() to get traft state
 
 	// TODO persist stat change.
 	// TODO lock

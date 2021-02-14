@@ -3,8 +3,10 @@
 package traft
 
 import (
+	fmt "fmt"
 	"net"
 	"sort"
+	"strings"
 	sync "sync"
 
 	grpc "google.golang.org/grpc"
@@ -61,6 +63,7 @@ func NewTRaft(id int64, idAddrs map[int64]string) *TRaft {
 	tr := &TRaft{
 		shutdown:   shutdown,
 		actionCh:   actionCh,
+		MsgCh:      make(chan string, 1024),
 		grpcServer: nil,
 		wg:         sync.WaitGroup{},
 		Node:       *node,
@@ -79,7 +82,8 @@ func NewTRaft(id int64, idAddrs map[int64]string) *TRaft {
 
 func (tr *TRaft) Start() {
 	tr.StartServer()
-	tr.StartLoops()
+	tr.StartMainLoop()
+	tr.StartVoteLoop()
 }
 
 func (tr *TRaft) StartServer() {
@@ -96,14 +100,21 @@ func (tr *TRaft) StartServer() {
 	lg.Infow("grpc started", "addr", addr)
 }
 
-func (tr *TRaft) StartLoops() {
-
+func (tr *TRaft) goit(f func()) {
 	tr.wg.Add(1)
-	go tr.Loop(tr.shutdown, tr.actionCh)
+	go func() {
+		defer tr.wg.Done()
+		f()
+	}()
+}
+
+func (tr *TRaft) StartMainLoop() {
+	tr.goit(tr.Loop)
 	lg.Infow("Started Loop")
+}
 
-	tr.wg.Add(1)
-	go tr.VoteLoop(tr.shutdown, tr.actionCh)
+func (tr *TRaft) StartVoteLoop() {
+	tr.goit(tr.VoteLoop)
 	lg.Infow("Start VoteLoop")
 }
 
@@ -115,7 +126,46 @@ func (tr *TRaft) Stop() {
 	close(tr.shutdown)
 
 	tr.wg.Wait()
+
 	lg.Infow("TRaft stopped")
+}
+
+func (tr *TRaft) sendMsg(msg ...interface{}) {
+	type sstr interface {
+		ShortStr() string
+	}
+
+	type str interface {
+		String() string
+	}
+
+	mm := []string{fmt.Sprintf("Id=%d", tr.Id)}
+	for _, m := range msg {
+		{
+			ss, ok := m.(sstr)
+			if ok {
+				mm = append(mm, ss.ShortStr())
+				continue
+			}
+		}
+		{
+			ss, ok := m.(str)
+			if ok {
+				mm = append(mm, ss.String())
+				continue
+			}
+		}
+		mm = append(mm, fmt.Sprintf("%v", m))
+	}
+
+	vv := strings.Join(mm, " ")
+
+	select {
+	case tr.MsgCh <- vv:
+		lg.Infow("sent msg", "msg", vv)
+	default:
+		lg.Infow("failure sending msg", "msg", vv)
+	}
 }
 
 func emptyProgress(id int64) *ReplicaStatus {

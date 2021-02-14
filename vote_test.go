@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -223,7 +224,23 @@ func TestTRaft_VoteOnce(t *testing.T) {
 	t2 := trafts[1]
 	t3 := trafts[2]
 
-	t.Run("2emptyVoter", func(t *testing.T) {
+	t.Run("2emptyVoter/term-0", func(t *testing.T) {
+		ta := require.New(t)
+		t2.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
+		t3.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
+
+		voted, err, higher := VoteOnce(
+			lid(0, id1),
+			ExportLogStatus(t1.Status[id1]),
+			t1.Config.Clone(),
+		)
+
+		ta.False(voted)
+		ta.Equal(ErrStaleTermId, errors.Cause(err))
+		ta.Equal(int64(0), higher)
+	})
+
+	t.Run("2emptyVoter/term-1", func(t *testing.T) {
 		ta := require.New(t)
 		t2.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
 		t3.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
@@ -310,9 +327,51 @@ func TestTRaft_VoteOnce(t *testing.T) {
 		)
 
 		ta.False(voted)
-		ta.Equal(ErrStaleTerm, errors.Cause(err))
+		ta.Equal(ErrStaleTermId, errors.Cause(err))
 		ta.Equal(int64(5), higher)
 	})
+}
+
+func TestTRaft_query(t *testing.T) {
+
+	ta := require.New(t)
+
+	ids := []int64{1}
+	id1 := int64(1)
+	lid := NewLeaderId
+
+	trafts := serveCluster(ids)
+	defer func() {
+		for _, s := range trafts {
+			s.Stop()
+		}
+	}()
+
+	t1 := trafts[0]
+	t1.initTraft(lid(1, 2), lid(3, 4), []int64{5}, nil, nil, lid(0, id1))
+
+	got := query(t1.actionCh, "logStat", nil).logStat
+	ta.Equal("001#002", got.Committer.ShortStr())
+	ta.Equal("0:20", got.Accepted.ShortStr())
+}
+
+func stopAll(ts []*TRaft) {
+	for _, s := range ts {
+		s.Stop()
+	}
+}
+
+func readMsg3(ts []*TRaft) string {
+	var msg string
+	select {
+	case msg = <-ts[0].MsgCh:
+	case msg = <-ts[1].MsgCh:
+	case msg = <-ts[2].MsgCh:
+	case <-time.After(time.Second):
+		panic("timeout")
+	}
+
+	return msg
 }
 
 func TestTRaft_VoteLoop(t *testing.T) {
@@ -325,111 +384,56 @@ func TestTRaft_VoteLoop(t *testing.T) {
 	id2 := int64(2)
 	id3 := int64(3)
 
-	_ = id1
-
 	lid := NewLeaderId
 
-	trafts := serveCluster(ids)
-	defer func() {
-		for _, s := range trafts {
-			s.Stop()
+	t.Run("emptyVoters/candidate-1", func(t *testing.T) {
+		ta := require.New(t)
+		ts := serveCluster(ids)
+		defer stopAll(ts)
+		ts[0].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id1))
+		ts[1].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
+		ts[2].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
+
+		go ts[0].VoteLoop()
+		msg := readMsg3(ts)
+
+		ta.Contains(msg, "vote-win VotedFor:<Term:1 Id:1 >")
+		ta.Equal(lid(1, 1), ts[0].Status[1].VotedFor)
+		// TODO check lease: ts[0].Status[1].VoteExpireAt
+	})
+
+	t.Run("emptyVoters/candidate-2", func(t *testing.T) {
+		ta := require.New(t)
+		ts := serveCluster(ids)
+		defer stopAll(ts)
+		ts[0].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id1))
+		ts[1].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
+		ts[2].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
+
+		go ts[1].VoteLoop()
+		msg := readMsg3(ts)
+
+		ta.Contains(msg, "vote-win VotedFor:<Id:2 >")
+		ta.Equal(lid(0, 2), ts[1].Status[2].VotedFor)
+	})
+	t.Run("emptyVoters/candidate-12", func(t *testing.T) {
+		ta := require.New(t)
+		ts := serveCluster(ids)
+		defer stopAll(ts)
+		ts[0].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id1))
+		ts[1].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
+		ts[2].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
+
+		go ts[0].VoteLoop()
+		go ts[1].VoteLoop()
+		for {
+			msg := readMsg3(ts)
+			fmt.Println("---", msg)
 		}
-	}()
 
-	t1 := trafts[0]
-	t2 := trafts[1]
-	t3 := trafts[2]
-
-	// TODO
-	return
-	// shutdown := make(chan struct{})
-
-	t.Run("2emptyVoter", func(t *testing.T) {
-		ta := require.New(t)
-		t2.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
-		t3.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
-
-		voted, err, higher := VoteOnce(
-			lid(1, id1),
-			ExportLogStatus(t1.Status[id1]),
-			t1.Config.Clone(),
-		)
-
-		ta.True(voted)
-		ta.Nil(err)
-		ta.Equal(int64(-1), higher)
+		// ta.Contains(msg, "vote-win VotedFor:<Id:2 >")
+		ta.Fail("foo")
 	})
-	t.Run("reject-by-one/stalelog", func(t *testing.T) {
-		ta := require.New(t)
-		t2.initTraft(lid(2, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
-		t3.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
-
-		voted, err, higher := VoteOnce(
-			lid(1, id1),
-			ExportLogStatus(t1.Status[id1]),
-			t1.Config.Clone(),
-		)
-		ta.True(voted)
-		ta.Nil(err)
-		ta.Equal(int64(-1), higher)
-	})
-	t.Run("reject-by-one/higherTerm", func(t *testing.T) {
-		ta := require.New(t)
-		t2.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
-		t3.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(5, id3))
-
-		voted, err, higher := VoteOnce(
-			lid(1, id1),
-			ExportLogStatus(t1.Status[id1]),
-			t1.Config.Clone(),
-		)
-		ta.False(voted)
-		ta.Nil(err)
-		ta.Equal(int64(5), higher)
-	})
-	t.Run("reject-by-two/stalelog", func(t *testing.T) {
-		ta := require.New(t)
-		t2.initTraft(lid(2, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
-		t3.initTraft(lid(0, 0), lid(0, 0), []int64{0}, nil, nil, lid(0, id3))
-
-		voted, err, higher := VoteOnce(
-			lid(1, id1),
-			ExportLogStatus(t1.Status[id1]),
-			t1.Config.Clone(),
-		)
-		ta.False(voted)
-		ta.Equal(ErrStaleLog, errors.Cause(err))
-		ta.Equal(int64(-1), higher)
-	})
-	t.Run("reject-by-two/stalelog-higherTerm", func(t *testing.T) {
-		ta := require.New(t)
-		t2.initTraft(lid(2, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
-		t3.initTraft(lid(0, 0), lid(0, 0), []int64{0}, nil, nil, lid(5, id3))
-
-		voted, err, higher := VoteOnce(
-			lid(1, id1),
-			ExportLogStatus(t1.Status[id1]),
-			t1.Config.Clone(),
-		)
-		ta.False(voted)
-		ta.Equal(ErrStaleLog, errors.Cause(err))
-		ta.Equal(int64(5), higher)
-	})
-	t.Run("reject-by-two/higherTerm", func(t *testing.T) {
-		ta := require.New(t)
-		t2.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(3, id2))
-		t3.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(5, id3))
-
-		voted, err, higher := VoteOnce(
-			lid(1, id1),
-			ExportLogStatus(t1.Status[id1]),
-			t1.Config.Clone(),
-		)
-		ta.False(voted)
-		ta.Equal(ErrStaleTerm, errors.Cause(err))
-		ta.Equal(int64(5), higher)
-	})
-
 }
 
 func TestTRaft_Replicate(t *testing.T) {

@@ -44,6 +44,7 @@ func serveCluster(ids []int64) []*TRaft {
 		// in a test env, only start server
 		// manually start loops
 		srv.StartServer()
+		srv.StartMainLoop()
 	}
 
 	return trafts
