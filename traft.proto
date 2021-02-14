@@ -261,7 +261,14 @@ message ReplicateReply {
     TailBitmap Committed = 3;
 }
 
+message ProposeReply {
+    bool OK = 2;
+    // I am not leader, please redirect to `OtherLeader` to write to TRaft.
+    LeaderId OtherLeader =1;
+}
+
 service TRaft {
     rpc Vote (VoteReq) returns (VoteReply) {}
     rpc Replicate (ReplicateReq) returns (ReplicateReply) {}
+    rpc Propose (Cmd) returns (ProposeReply) {}
 }

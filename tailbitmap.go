@@ -258,3 +258,16 @@ func (tb *TailBitmap) ShortStr() string {
 
 	return strings.Join(s, "")
 }
+
+func (tb *TailBitmap) DebugStr() string {
+	if tb == nil {
+		return "0"
+	}
+	s := []string{fmt.Sprintf("%d", tb.Offset)}
+	for _, w := range tb.Words {
+		v := bitmap.Fmt(w)
+		s = append(s, v)
+	}
+
+	return strings.Join(s, ",")
+}

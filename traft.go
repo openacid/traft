@@ -119,8 +119,11 @@ func (tr *TRaft) StartVoteLoop() {
 }
 
 func (tr *TRaft) Stop() {
-	lg.Infow("Stopping grpc")
-	tr.grpcServer.Stop()
+	id := tr.Id
+	addr := tr.Config.Members[id].Addr
+	lg.Infow("Stopping grpc: ", "addr:", addr)
+	// tr.grpcServer.Stop() does not wait.
+	tr.grpcServer.GracefulStop()
 
 	if tr.stopped {
 		lg.Infow("TRaft already stopped")

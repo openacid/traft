@@ -255,6 +255,34 @@ func (tr *TRaft) Loop() {
 				} else {
 					a.rstCh <- &queryRst{ok: false}
 				}
+
+			case "propose":
+				me := tr.Status[id]
+
+				now := uSecond()
+
+				if now < me.VoteExpireAt {
+					if me.VotedFor.Id == id {
+						cmd := a.arg.(*Cmd)
+						rec := tr.AddLog(cmd)
+						fmt.Println("overrides:", rec.Overrides.DebugStr())
+						me.Accepted.Union(rec.Overrides)
+
+						// TODO send message to replicator.
+
+						a.rstCh <- &queryRst{ok: true}
+					} else {
+						a.rstCh <- &queryRst{
+							ok: false,
+							v:  me.VotedFor.Clone(),
+						}
+					}
+				} else {
+					// no valid leader for now
+					a.rstCh <- &queryRst{
+						ok: false,
+					}
+				}
 			}
 		}
 	}
@@ -325,7 +353,7 @@ func (tr *TRaft) internalMergeLogs(votes []*VoteReply) {
 	}
 }
 
-// For other goroutine to ask mainloop to query/update
+// For other goroutine to ask mainloop to query
 func query(queryCh chan<- *queryBody, operation string, arg interface{}) *queryRst {
 	rstCh := make(chan *queryRst)
 	queryCh <- &queryBody{operation, arg, rstCh}
@@ -586,9 +614,8 @@ func VoteOnce(
 }
 
 // Only a established leader should use this func.
+// no lock protection, must be called from Loop()
 func (tr *TRaft) AddLog(cmd *Cmd) *Record {
-
-	// TODO lock
 
 	me := tr.Status[tr.Id]
 
@@ -607,7 +634,6 @@ func (tr *TRaft) AddLog(cmd *Cmd) *Record {
 		prev := tr.Logs[i]
 		if r.Interfering(prev) {
 			r.Overrides = prev.Overrides.Clone()
-			r.Overrides.Set(lsn)
 			break
 		}
 	}
@@ -616,6 +642,8 @@ func (tr *TRaft) AddLog(cmd *Cmd) *Record {
 		// there is not a interfering record.
 		r.Overrides = NewTailBitmap(0)
 	}
+
+	r.Overrides.Set(lsn)
 
 	// all log I do not know must be executed in order.
 	// Because I do not know of the intefering relations.
@@ -705,6 +733,19 @@ func (tr *TRaft) internalVote(req *VoteReq) *VoteReply {
 	repl.Logs = logs
 
 	return repl
+}
+
+func (tr *TRaft) Propose(ctx context.Context, cmd *Cmd) (*ProposeReply, error) {
+
+	rst := query(tr.actionCh, "propose", cmd)
+	var otherLeader *LeaderId
+	if rst.v != nil {
+		otherLeader = rst.v.(*LeaderId)
+	}
+	return &ProposeReply{
+		OK:          rst.ok,
+		OtherLeader: otherLeader,
+	}, nil
 }
 
 func (tr *TRaft) Replicate(ctx context.Context, req *ReplicateReq) (*ReplicateReply, error) {

@@ -586,6 +586,95 @@ func TestTRaft_VoteLoop(t *testing.T) {
 	})
 }
 
+func TestTRaft_Propose(t *testing.T) {
+
+	ta := require.New(t)
+	_ = ta
+
+	lid := NewLeaderId
+
+	t.Run("id2MaxLog", func(t *testing.T) {
+		ta := require.New(t)
+		_ = ta
+
+		ids := []int64{0, 1, 2}
+		ts := serveCluster(ids)
+		defer stopAll(ts)
+
+		ts[0].initTraft(lid(2, 0), lid(1, 1), []int64{}, nil, nil, lid(0, 0))
+		ts[1].initTraft(lid(3, 1), lid(1, 1), []int64{}, nil, nil, lid(0, 1))
+		ts[2].initTraft(lid(1, 2), lid(2, 1), []int64{}, nil, []int64{0}, lid(0, 2))
+
+		ts[1].Status[1].VotedFor = NewLeaderId(3, 1)
+
+		mems := ts[1].Config.Members
+
+		sendCmd := func(addr string, cmd *Cmd) *ProposeReply {
+			var reply *ProposeReply
+			rpcTo(addr, func(cli TRaftClient, ctx context.Context) {
+				var err error
+				reply, err = cli.Propose(ctx, cmd)
+				if err != nil {
+					panic("wtf")
+				}
+			})
+			return reply
+		}
+
+		// no leader elected, not allow to propose
+		reply := sendCmd(mems[1].Addr, NewCmdI64("foo", "x", 1))
+		ta.Equal(&ProposeReply{
+			OK:          false,
+			OtherLeader: nil,
+		}, reply)
+
+		// elect ts[1]
+
+		go ts[1].VoteLoop()
+
+		waitForMsg(ts, map[string]int{
+			"vote-win VotedFor:<Term:4 Id:1 >": 1,
+		})
+
+		// send to non-leader replica:
+		reply = sendCmd(mems[0].Addr, NewCmdI64("foo", "x", 1))
+		ta.Equal(&ProposeReply{OK: false, OtherLeader: NewLeaderId(4, 1)}, reply)
+
+		// succ to propsoe
+		reply = sendCmd(mems[1].Addr, NewCmdI64("set", "y", 1))
+		ta.Equal(&ProposeReply{OK: true, OtherLeader: nil}, reply)
+
+		ta.Equal(NewTailBitmap(0, 0), ts[1].Status[1].Accepted)
+		ta.Equal(
+			join("[<004#001:000{set(y, 1)}-0:1→0>", "]"),
+			RecordsShortStr(ts[1].Logs, ""),
+		)
+
+		reply = sendCmd(mems[1].Addr, NewCmdI64("set", "y", 2))
+		ta.Equal(&ProposeReply{OK: true, OtherLeader: nil}, reply)
+
+		ta.Equal(NewTailBitmap(0, 0, 1), ts[1].Status[1].Accepted)
+		ta.Equal(
+			join("[<004#001:000{set(y, 1)}-0:1→0>",
+				"<004#001:001{set(y, 2)}-0:3→0>",
+				"]"),
+			RecordsShortStr(ts[1].Logs, ""),
+		)
+
+		reply = sendCmd(mems[1].Addr, NewCmdI64("set", "x", 3))
+		ta.Equal(&ProposeReply{OK: true, OtherLeader: nil}, reply)
+
+		ta.Equal(NewTailBitmap(3), ts[1].Status[1].Accepted)
+		ta.Equal(
+			join("[<004#001:000{set(y, 1)}-0:1→0>",
+				"<004#001:001{set(y, 2)}-0:3→0>",
+				"<004#001:002{set(x, 3)}-0:4→0>",
+				"]"),
+			RecordsShortStr(ts[1].Logs, ""),
+		)
+	})
+}
+
 func TestTRaft_Replicate(t *testing.T) {
 
 	ta := require.New(t)
@@ -690,10 +779,20 @@ func TestTRaft_AddLog(t *testing.T) {
 
 	id := int64(1)
 	tr := NewTRaft(id, map[int64]string{id: "123"})
-	tr.AddLog(NewCmdI64("set", "x", 1))
-	// me := tr.Status[id]
 
-	ta.Equal("[<000#001:000{set(x, 1)}-0→0>]", RecordsShortStr(tr.Logs))
+	tr.AddLog(NewCmdI64("set", "x", 1))
+	ta.Equal("[<000#001:000{set(x, 1)}-0:1→0>]", RecordsShortStr(tr.Logs))
+
+	tr.AddLog(NewCmdI64("set", "y", 1))
+	ta.Equal(join(
+		"[<000#001:000{set(x, 1)}-0:1→0>",
+		"<000#001:001{set(y, 1)}-0:2→0>]"), RecordsShortStr(tr.Logs, ""))
+
+	tr.AddLog(NewCmdI64("set", "x", 1))
+	ta.Equal(join(
+		"[<000#001:000{set(x, 1)}-0:1→0>",
+		"<000#001:001{set(y, 1)}-0:2→0>",
+		"<000#001:002{set(x, 1)}-0:5→0>]"), RecordsShortStr(tr.Logs, ""))
 
 	varnames := "wxyz"
 
@@ -702,7 +801,7 @@ func TestTRaft_AddLog(t *testing.T) {
 		tr.AddLog(NewCmdI64("set", varnames[vi:vi+1], int64(i)))
 	}
 	l := len(tr.Logs)
-	ta.Equal("<000#001:067{set(y, 66)}-0:8888888888888880:8→0>", tr.Logs[l-1].ShortStr())
+	ta.Equal("<000#001:069{set(y, 66)}-0:2222222222222222:22→0>", tr.Logs[l-1].ShortStr())
 
 	// truncate some logs, then add another 67
 	// To check Overrides and Depends
@@ -715,6 +814,6 @@ func TestTRaft_AddLog(t *testing.T) {
 		tr.AddLog(NewCmdI64("set", varnames[vi:vi+1], 100+int64(i)))
 	}
 	l = len(tr.Logs)
-	ta.Equal("<000#001:134{set(y, 166)}-64:4444444444444448:44→64:1>", tr.Logs[l-1].ShortStr())
+	ta.Equal("<000#001:136{set(y, 166)}-64:1111111111111122:111→64:1>", tr.Logs[l-1].ShortStr())
 
 }
