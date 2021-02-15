@@ -34,24 +34,6 @@ type wantVoteReply struct {
 	logs         string
 }
 
-type replicateReqStat struct {
-	committer *LeaderId
-	logs      []int64
-	nilLogs   map[int64]bool
-}
-
-type wantReplicateReply struct {
-	votedFor  *LeaderId
-	accepted  *TailBitmap
-	committed *TailBitmap
-}
-
-type wantVoterStat struct {
-	votedFor *LeaderId
-	accepted *TailBitmap
-	logs     string
-}
-
 func TestTRaft_Vote(t *testing.T) {
 
 	ta := require.New(t)
@@ -59,14 +41,10 @@ func TestTRaft_Vote(t *testing.T) {
 	ids := []int64{1, 2, 3}
 	id := int64(1)
 
-	trafts := serveCluster(ids)
-	defer func() {
-		for _, s := range trafts {
-			s.Stop()
-		}
-	}()
+	ts := serveCluster(ids)
+	defer stopAll(ts)
 
-	t1 := trafts[0]
+	t1 := ts[0]
 
 	testVote := func(
 		cand candStat,
@@ -217,16 +195,12 @@ func TestTRaft_VoteOnce(t *testing.T) {
 
 	lid := NewLeaderId
 
-	trafts := serveCluster(ids)
-	defer func() {
-		for _, s := range trafts {
-			s.Stop()
-		}
-	}()
+	ts := serveCluster(ids)
+	defer stopAll(ts)
 
-	t1 := trafts[0]
-	t2 := trafts[1]
-	t3 := trafts[2]
+	t1 := ts[0]
+	t2 := ts[1]
+	t3 := ts[2]
 
 	t.Run("2emptyVoter/term-0", func(t *testing.T) {
 		ta := require.New(t)
@@ -344,14 +318,10 @@ func TestTRaft_query(t *testing.T) {
 	id1 := int64(1)
 	lid := NewLeaderId
 
-	trafts := serveCluster(ids)
-	defer func() {
-		for _, s := range trafts {
-			s.Stop()
-		}
-	}()
+	ts := serveCluster(ids)
+	defer stopAll(ts)
 
-	t1 := trafts[0]
+	t1 := ts[0]
 	t1.initTraft(lid(1, 2), lid(3, 4), []int64{5}, nil, nil, lid(0, id1))
 
 	got := query(t1.actionCh, "logStat", nil).v.(*LogStatus)
@@ -587,9 +557,6 @@ func TestTRaft_VoteLoop(t *testing.T) {
 
 func TestTRaft_Propose(t *testing.T) {
 
-	ta := require.New(t)
-	_ = ta
-
 	lid := NewLeaderId
 
 	sendPropose := func(addr string, xcmd interface{}) *ProposeReply {
@@ -735,7 +702,7 @@ func TestTRaft_LogForward(t *testing.T) {
 			var err error
 			reply, err = cli.LogForward(ctx, req)
 			if err != nil {
-				//	panic("wtf")
+				lg.Infow("sendLogForward:err", "err", err)
 			}
 		})
 		return reply
