@@ -74,10 +74,17 @@ func initZap() {
 
 }
 
+type replicate struct {
+	committer *LeaderId
+	config    *ClusterConfig
+	log       *Record
+}
+
 type TRaft struct {
 	// TODO lock first
 	mu sync.Mutex
 
+	// prevent closing twice.
 	stopped bool
 
 	// close it to notify all goroutines to shutdown.
@@ -88,6 +95,11 @@ type TRaft struct {
 	// Other goroutines send an queryBody through this channel and wait for an
 	// operation reply.
 	actionCh chan *queryBody
+
+	replicationCh chan *replicate
+
+	// what log has been committed by replication
+	commitCh chan int64
 
 	// for external component to receive traft state changes.
 	MsgCh chan string
@@ -155,6 +167,16 @@ func buildPseudoLogs(
 		}
 	}
 	return start, logs
+}
+
+// a func for test purpose only
+func (tr *TRaft) addlogs(cmds ...cstr) {
+	me := tr.Status[tr.Id]
+	for _, cs := range cmds {
+		cmd := cs.ToCmd()
+		r := tr.AddLog(cmd)
+		me.Accepted.Union(r.Overrides)
+	}
 }
 
 type leaderAndVotes struct {
@@ -258,7 +280,6 @@ func (tr *TRaft) Loop() {
 
 			case "propose":
 				me := tr.Status[id]
-
 				now := uSecond()
 
 				if now < me.VoteExpireAt {
@@ -283,8 +304,98 @@ func (tr *TRaft) Loop() {
 						ok: false,
 					}
 				}
+
+			case "replicate":
+				// receive logs forwarded from leader
+				rreq := a.arg.(*ReplicateReq)
+				reply := tr.handleReplicate(rreq)
+				a.rstCh <- &queryRst{
+					ok: reply.OK,
+					v:  reply,
+				}
 			}
 		}
+	}
+}
+
+func (tr *TRaft) handleReplicate(req *ReplicateReq) *ReplicateReply {
+	id := tr.Id
+	me := tr.Status[id]
+	now := uSecond()
+	cr := req.Committer.Cmp(me.VotedFor)
+	// TODO what if req.Committer > me.VotedFor?
+	if cr != 0 || now > me.VoteExpireAt {
+		lg.Infow("hdl-replicate: illegal committer",
+			"req.Commiter", req.Committer,
+			"me.VotedFor", me.VotedFor,
+			"me.VoteExpireAt-now", me.VoteExpireAt-now)
+
+		return &ReplicateReply{
+			OK:       false,
+			VotedFor: me.VotedFor.Clone(),
+		}
+	}
+
+	cr = req.Committer.Cmp(me.Committer)
+	if cr > 0 {
+		lg.Infow("hdl-replicate: newer committer",
+			"req.Committer", req.Committer,
+			"me.Committer", me.Committer,
+		)
+
+		// if req.Committer is newer, discard all non-committed logs
+		me.Accepted = me.Committed.Clone()
+
+		i := len(tr.Logs) - 1
+		for ; i >= 0; i-- {
+			r := tr.Logs[i]
+			if r.Empty() {
+				continue
+			}
+
+			if me.Accepted.Get(r.Seq) == 0 {
+				tr.Logs[i] = &Record{}
+			}
+		}
+	}
+
+	// add new logs
+
+	newlogs := req.Logs
+	for _, r := range newlogs {
+		lsn := r.Seq
+		idx := lsn - tr.LogOffset
+
+		for int(idx) >= len(tr.Logs) {
+			tr.Logs = append(tr.Logs, &Record{})
+		}
+
+		if !tr.Logs[idx].Empty() && !tr.Logs[idx].Equal(r) {
+			panic("wtf")
+		}
+		tr.Logs[idx] = r
+
+		me.Accepted.Union(r.Overrides)
+	}
+
+	// TODO refine me
+	// remove empty logs at top
+	for len(tr.Logs) > 0 {
+		l := len(tr.Logs)
+		if tr.Logs[l-1].Empty() {
+			tr.Logs = tr.Logs[:l-1]
+		} else {
+			break
+		}
+	}
+
+	me.Committer = req.Committer.Clone()
+
+	return &ReplicateReply{
+		OK:        true,
+		VotedFor:  me.VotedFor.Clone(),
+		Accepted:  me.Accepted.Clone(),
+		Committed: me.Committed.Clone(),
 	}
 }
 
@@ -386,10 +497,6 @@ func (tr *TRaft) VoteLoop() {
 			running = false
 		}
 	}
-
-	// maxStaleTermSleep := time.Millisecond * 10
-	// heartBeatSleep := time.Millisecond * 10
-	// followerSleep := time.Millisecond * 10
 
 	maxStaleTermSleep := time.Millisecond * 200
 	heartBeatSleep := time.Millisecond * 200
@@ -498,6 +605,154 @@ func (tr *TRaft) VoteLoop() {
 			// I can not be the leader.
 			// sleep a day. waiting for others to elect to be a leader.
 			slp(time.Second * 86400)
+		}
+	}
+}
+
+func (tr *TRaft) ReplicationLoop() {
+
+	shutdown := tr.shutdown
+	act := tr.actionCh
+
+	rch := tr.replicationCh
+
+	// running := true
+	id := tr.Id
+
+	type replicateRst struct {
+		from  *ReplicaInfo
+		reply *ReplicateReply
+		err   error
+	}
+
+	for {
+		var rp *replicate
+		select {
+		case <-shutdown:
+			return
+		case rp = <-rch:
+		}
+
+		ch := make(chan *replicateRst)
+
+		for _, m := range rp.config.Members {
+			if m.Id == id {
+				continue
+			}
+
+			go func(ri ReplicaInfo) {
+				rpcTo(ri.Addr, func(cli TRaftClient, ctx context.Context) {
+					// TODO nil req
+					reply, err := cli.Replicate(ctx, nil)
+					ch <- &replicateRst{&ri, reply, err}
+				})
+
+			}(*m)
+
+		}
+
+		leadst := query(act, "leaderStat", nil).v.(*LeaderStatus)
+
+		now := uSecond()
+
+		// TODO refine this: wait until VoteExpireAt and watch for missing
+		// heartbeat.
+		if now < leadst.VoteExpireAt {
+
+			lg.Infow("leader-not-expired",
+				"Id", tr.Id,
+				"VotedFor", leadst.VotedFor,
+				"leadst.VoteExpireAt-now", leadst.VoteExpireAt-now)
+
+			if leadst.VotedFor.Id == tr.Id {
+				// I am a leader
+				// TODO heartbeat other replicas to keep leadership
+				//slp(heartBeatSleep)
+			} else {
+				//slp(followerSleep)
+			}
+
+			continue
+		}
+
+		// call for a new leader!!!
+		lg.Infow("leader-expired",
+			"Id", tr.Id,
+			"VotedFor", leadst.VotedFor,
+			"leadst.VoteExpireAt-now", leadst.VoteExpireAt-now)
+
+		logst := query(act, "logStat", nil).v.(*LogStatus)
+		config := query(act, "config", nil).v.(*ClusterConfig)
+
+		// vote myself
+		leadst.VotedFor.Term++
+		leadst.VotedFor.Id = tr.Id
+
+		{
+			// update local vote first
+			ok := query(act, "update_leaderStat", leadst).ok
+			if !ok {
+				// voted for other replica
+				leadst = query(act, "leaderStat", nil).v.(*LeaderStatus)
+				lg.Infow("reload-leader",
+					"Id", id,
+					"leadst.VotedFor", leadst.VotedFor,
+					"leadst.VoteExpireAt", leadst.VoteExpireAt,
+				)
+				continue
+			}
+		}
+
+		tr.sendMsg("vote-start", leadst.VotedFor.ShortStr(), logst)
+
+		voted, err, higher := VoteOnce(
+			leadst.VotedFor,
+			logst,
+			config,
+		)
+
+		lg.Infow("vote result", "voted", voted, "err", err, "higher", higher)
+
+		if voted != nil {
+			// granted by a quorum
+
+			leadst.VoteExpireAt = uSecond() + leaderLease
+
+			lg.Infow("to-update-leader", "leadst", leadst.VoteExpireAt)
+
+			ok := query(act, "update_leaderAndLog", &leaderAndVotes{
+				leadst,
+				voted,
+			}).ok
+
+			if ok {
+				tr.sendMsg("vote-win", leadst)
+				// slp(heartBeatSleep)
+			} else {
+				tr.sendMsg("vote-fail", "reason:fail-to-update", leadst)
+				lg.Infow("reload-leader",
+					"Id", id,
+					"leadst.VotedFor", leadst.VotedFor,
+					"leadst.VoteExpireAt", leadst.VoteExpireAt,
+				)
+			}
+			continue
+		}
+
+		tr.sendMsg("vote-fail", "err", err)
+
+		// not voted
+
+		switch errors.Cause(err) {
+		case ErrStaleTermId:
+			//slp(time.Millisecond*5 + time.Duration(rand.Int63n(int64(maxStaleTermSleep))))
+			// leadst.VotedFor.Term = higher + 1
+		case ErrTimeout:
+			//slp(time.Millisecond * 10)
+		case ErrStaleLog:
+			// I can not be the leader.
+			// sleep a day. waiting for others to elect to be a leader.
+			//slp(time.Second * 86400)
 		}
 	}
 }
@@ -657,11 +912,6 @@ func (tr *TRaft) AddLog(cmd *Cmd) *Record {
 	return r
 }
 
-func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
-	repl := query(tr.actionCh, "vote", req).v.(*VoteReply)
-	return repl, nil
-}
-
 // no lock protect, must be called by TRaft.Loop()
 func (tr *TRaft) internalVote(req *VoteReq) *VoteReply {
 
@@ -733,85 +983,4 @@ func (tr *TRaft) internalVote(req *VoteReq) *VoteReply {
 	repl.Logs = logs
 
 	return repl
-}
-
-func (tr *TRaft) Propose(ctx context.Context, cmd *Cmd) (*ProposeReply, error) {
-
-	rst := query(tr.actionCh, "propose", cmd)
-	var otherLeader *LeaderId
-	if rst.v != nil {
-		otherLeader = rst.v.(*LeaderId)
-	}
-	return &ProposeReply{
-		OK:          rst.ok,
-		OtherLeader: otherLeader,
-	}, nil
-}
-
-func (tr *TRaft) Replicate(ctx context.Context, req *ReplicateReq) (*ReplicateReply, error) {
-
-	// TODO use query() to get traft state
-
-	// TODO persist stat change.
-	// TODO lock
-
-	fmt.Println("Replicate:", req)
-	me := tr.Status[tr.Id]
-	{
-		r := me.VotedFor.Cmp(me.Committer)
-		fmt.Println(me.VotedFor)
-		fmt.Println(me.Committer)
-		fmt.Println(r)
-		if r < 0 {
-			panic("wtf")
-		}
-
-	}
-
-	repl := &ReplicateReply{
-		VotedFor: me.VotedFor.Clone(),
-	}
-
-	// check leadership
-
-	r := req.Committer.Cmp(me.VotedFor)
-	if r < 0 {
-		return repl, nil
-	}
-
-	if r > 0 {
-		// r>0: it is a legal leader.
-		// correctness will be kept.
-		// follow the (literally) greatest leader!!! :DDD
-		me.VotedFor = req.Committer.Clone()
-	}
-
-	// r == 0: Committer is the same as I voted for.
-
-	if req.Committer.Cmp(me.Committer) > 0 {
-		me.Committer = req.Committer.Clone()
-	}
-
-	// TODO: if a newer committer is seen, non-committed logs
-	// can be sure to stale and should be cleaned.
-
-	for _, r := range req.Logs {
-		lsn := r.Seq
-		for lsn-tr.LogOffset >= int64(len(tr.Logs)) {
-			// fill in the gap
-			tr.Logs = append(tr.Logs, &Record{})
-		}
-		tr.Logs[lsn-tr.LogOffset] = r
-
-		// If a record interferes and overrides a previous log,
-		// it then does not need the overrided log to be commit to commit this
-		// record.
-		// As if a previous log has already accepted.
-		me.Accepted.Union(r.Overrides)
-	}
-
-	repl.Accepted = me.Accepted.Clone()
-	repl.Committed = me.Committed.Clone()
-
-	return repl, nil
 }

@@ -678,99 +678,142 @@ func TestTRaft_Propose(t *testing.T) {
 func TestTRaft_Replicate(t *testing.T) {
 
 	ta := require.New(t)
+	_ = ta
 
-	ids := []int64{1, 2, 3}
-	id := int64(1)
+	ids := []int64{0, 1, 2}
 
-	trafts := serveCluster(ids)
-	defer func() {
-		for _, s := range trafts {
-			s.Stop()
-		}
-	}()
+	ts := serveCluster(ids)
+	defer stopAll(ts)
 
-	t1 := trafts[0]
-	me := t1.Status[id]
+	lid := NewLeaderId
+	_ = lid
+	bm := NewTailBitmap
+	_ = bm
 
-	testReplicate := func(
-		rreq replicateReqStat,
-		voter voterStat,
-	) *ReplicateReply {
+	// init cluster
+	// give ts[1] a highest term thus to be a leader
+	ts[0].initTraft(lid(2, 0), lid(0, 1), []int64{}, nil, nil, lid(1, 0))
+	ts[1].initTraft(lid(3, 1), lid(0, 1), []int64{}, nil, nil, lid(3, 1))
+	ts[2].initTraft(lid(1, 2), lid(0, 1), []int64{}, nil, []int64{0}, lid(0, 2))
 
-		t1.initTraft(
-			voter.committer, voter.author, voter.logs, voter.nilLogs, voter.committed,
-			voter.votedFor,
-		)
+	ts[0].addlogs()
+	ts[1].addlogs("x=0", "y=1", "x=2")
+	ts[2].addlogs("", "y=5")
 
-		_, logs := buildPseudoLogs(rreq.committer, rreq.logs, rreq.nilLogs)
-		req := &ReplicateReq{
-			Committer: rreq.committer,
-			Logs:      logs,
-		}
-
+	sendReplicate := func(addr string, req *ReplicateReq) *ReplicateReply {
 		var reply *ReplicateReply
-		addr := t1.Config.Members[id].Addr
-
 		rpcTo(addr, func(cli TRaftClient, ctx context.Context) {
 			var err error
 			reply, err = cli.Replicate(ctx, req)
 			if err != nil {
-				panic("wtf")
+				//	panic("wtf")
 			}
 		})
-
 		return reply
 	}
 
-	lid := NewLeaderId
-	_ = lid
+	logs := ts[1].Logs
 
+	sec1k := int64(time.Second * 1000)
 	cases := []struct {
-		cand      replicateReqStat
-		voter     voterStat
-		want      wantReplicateReply
-		wantVoter wantVoterStat
+		name          string
+		to            int64
+		votedFor      *LeaderId
+		expire        int64
+		committer     *LeaderId
+		logs          []*Record
+		wantOK        bool
+		wantVotedFor  *LeaderId
+		wantAccepted  *TailBitmap
+		wantCommitted *TailBitmap
+		wantLogs      []string
 	}{
-		//
-		// {
-		//     replicateReqStat{committer: lid(1, id), logs: []int64{5}},
-		//     voterStat{votedFor: lid(1, id), committer: lid(1, id), author: lid(1, id), logs: []int64{}},
-		//     wantReplicateReply{
-		//         votedFor:  lid(1, id),
-		//         accepted:  NewTailBitmap(0, 5),
-		//         committed: NewTailBitmap(0),
-		//     },
-		//     wantVoterStat{
-		//         votedFor: lid(1, id),
-		//         accepted: NewTailBitmap(0, 5),
-		//         logs:     "",
-		//     },
-		// },
+		{"unmatchedCommitter",
+			0, lid(1, 0), sec1k, lid(1, 2), logs[0:],
+			false, lid(1, 0), nil, nil, nil,
+		},
+		{"VotedForExpired",
+			0, lid(1, 2), -sec1k, lid(1, 2), logs[0:],
+			false, lid(1, 2), nil, nil, nil,
+		},
+		{"accept/log2",
+			0, lid(3, 1), sec1k, lid(3, 1), logs[2:],
+			true, lid(3, 1), bm(0, 0, 2), bm(0),
+			[]string{
+				"<>",
+				"<>",
+				"<003#001:002{set(x, 2)}-0:5→0>",
+			},
+		},
+		{"accept/log12",
+			0, lid(3, 1), sec1k, lid(3, 1), logs[1:],
+			true, lid(3, 1), bm(3), bm(0),
+			[]string{
+				"<>",
+				"<003#001:001{set(y, 1)}-0:2→0>",
+				"<003#001:002{set(x, 2)}-0:5→0>",
+			},
+		},
+		{"accept/log12/overrideOld",
+			2, lid(3, 1), sec1k, lid(3, 1), logs[1:],
+			true, lid(3, 1), bm(3), bm(1),
+			[]string{
+				"<>",
+				"<003#001:001{set(y, 1)}-0:2→0>",
+				"<003#001:002{set(x, 2)}-0:5→0>",
+			},
+		},
 	}
 
-	for i, c := range cases {
-		reply := testReplicate(c.cand, c.voter)
+	for _, c := range cases {
+		t.Run(
+			fmt.Sprintf("%d-to-%d/%s", 1, c.to, c.name),
+			func(t *testing.T) {
+				dst := ts[c.to].Status[c.to]
+				dst.VotedFor = c.votedFor
+				dst.VoteExpireAt = uSecond() + c.expire
 
-		fmt.Println(reply.String())
+				addr := ts[1].Config.Members[c.to].Addr
+				repl := sendReplicate(addr, &ReplicateReq{
+					Committer: c.committer,
+					Logs:      c.logs,
+				})
 
-		ta.Equal(
-			c.want,
-			wantReplicateReply{
-				votedFor:  reply.VotedFor,
-				accepted:  reply.Accepted,
-				committed: reply.Committed,
-			},
-			"%d-th: reply: case: %+v", i+1, c)
-
-		ta.Equal(
-			c.want,
-			wantVoterStat{
-				votedFor: me.VotedFor,
-				accepted: me.Accepted,
-				logs:     RecordsShortStr(t1.Logs),
-			},
-			"%d-th: voter: case: %+v", i+1, c)
+				ta.Equal(c.wantOK, repl.OK)
+				ta.Equal(c.wantVotedFor, repl.VotedFor)
+				if c.wantAccepted != nil {
+					ta.True(c.wantAccepted.Equal(repl.Accepted))
+					ta.True(c.wantAccepted.Equal(dst.Accepted))
+				}
+				if c.wantCommitted != nil {
+					ta.True(c.wantCommitted.Equal(repl.Committed))
+					ta.True(c.wantCommitted.Equal(dst.Committed))
+				}
+				if c.wantLogs != nil {
+					ta.Equal("["+join(c.wantLogs...)+"]",
+						RecordsShortStr(ts[c.to].Logs, ""))
+				}
+			})
 	}
+}
+
+func TestTRaft_AddLog_nil(t *testing.T) {
+
+	ta := require.New(t)
+
+	id := int64(1)
+	tr := NewTRaft(id, map[int64]string{id: "123"})
+
+	tr.AddLog(NewCmdI64("set", "x", 1))
+	tr.AddLog(NewCmdI64("set", "y", 1))
+	tr.AddLog(nil)
+	tr.AddLog(NewCmdI64("set", "x", 1))
+
+	ta.Equal(join(
+		"[<000#001:000{set(x, 1)}-0:1→0>",
+		"<000#001:001{set(y, 1)}-0:2→0>",
+		"<>",
+		"<000#001:003{set(x, 1)}-0:9→0>]"), RecordsShortStr(tr.Logs, ""))
 }
 
 func TestTRaft_AddLog(t *testing.T) {

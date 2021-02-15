@@ -249,6 +249,7 @@ message ReplicateReq {
 }
 
 message ReplicateReply {
+    bool OK = 10;
     // A replica responding a VotedFor with the same value with
     // ReplciateReq.Committer indicates the logs are accepted.
     // Otherwise declined.

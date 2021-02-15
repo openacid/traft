@@ -50,6 +50,7 @@ func Test_cstr(t *testing.T) {
 	}{
 		{"x=3", NewCmdI64("set", "x", 3)},
 		{"y=4", NewCmdI64("set", "y", 4)},
+		{"", nil},
 	}
 
 	for i, c := range cases {

@@ -58,6 +58,10 @@ type toCmd interface {
 type cstr string
 
 func (c *cstr) ToCmd() *Cmd {
+	if *c == "" {
+		return nil
+	}
+
 	kv := strings.Split(string(*c), "=")
 	k := kv[0]
 
