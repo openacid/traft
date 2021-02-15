@@ -2,6 +2,8 @@ package traft
 
 import (
 	fmt "fmt"
+	"strconv"
+	"strings"
 )
 
 func NewCmdI64(op, key string, v int64) *Cmd {
@@ -47,4 +49,21 @@ func (a *Cmd) Interfering(b *Cmd) bool {
 	}
 
 	return false
+}
+
+type toCmd interface {
+	ToCmd() *Cmd
+}
+
+type cstr string
+
+func (c *cstr) ToCmd() *Cmd {
+	kv := strings.Split(string(*c), "=")
+	k := kv[0]
+
+	v, err := strconv.ParseInt(kv[1], 10, 64)
+	if err != nil {
+		panic(string(*c) + " convert to Cmd")
+	}
+	return NewCmdI64("set", k, v)
 }
