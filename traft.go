@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	sync "sync"
+	"time"
 
 	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -61,6 +62,7 @@ func NewTRaft(id int64, idAddrs map[int64]string) *TRaft {
 	actionCh := make(chan *queryBody)
 
 	tr := &TRaft{
+		running:    true,
 		shutdown:   shutdown,
 		actionCh:   actionCh,
 		MsgCh:      make(chan string, 1024),
@@ -125,18 +127,26 @@ func (tr *TRaft) Stop() {
 	// tr.grpcServer.Stop() does not wait.
 	tr.grpcServer.GracefulStop()
 
-	if tr.stopped {
+	if !tr.running {
 		lg.Infow("TRaft already stopped")
 		return
 	}
 
 	lg.Infow("close shutdown")
 	close(tr.shutdown)
-	tr.stopped = true
+	tr.running = false
 
 	tr.wg.Wait()
 
 	lg.Infow("TRaft stopped")
+}
+
+// stoppable sleep, if tr.Stop() has been called, it returns at once
+func (tr *TRaft) sleep(t time.Duration) {
+	select {
+	case <-time.After(t):
+	case <-tr.shutdown:
+	}
 }
 
 func toStr(v interface{}) string {

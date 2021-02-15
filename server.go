@@ -84,8 +84,7 @@ type TRaft struct {
 	// TODO lock first
 	mu sync.Mutex
 
-	// prevent closing twice.
-	stopped bool
+	running bool
 
 	// close it to notify all goroutines to shutdown.
 	shutdown chan struct{}
@@ -279,31 +278,9 @@ func (tr *TRaft) Loop() {
 				}
 
 			case "propose":
-				me := tr.Status[id]
-				now := uSecond()
-
-				if now < me.VoteExpireAt {
-					if me.VotedFor.Id == id {
-						cmd := a.arg.(*Cmd)
-						rec := tr.AddLog(cmd)
-						fmt.Println("overrides:", rec.Overrides.DebugStr())
-						me.Accepted.Union(rec.Overrides)
-
-						// TODO send message to replicator.
-
-						a.rstCh <- &queryRst{ok: true}
-					} else {
-						a.rstCh <- &queryRst{
-							ok: false,
-							v:  me.VotedFor.Clone(),
-						}
-					}
-				} else {
-					// no valid leader for now
-					a.rstCh <- &queryRst{
-						ok: false,
-					}
-				}
+				cmd := a.arg.(*Cmd)
+				repl := tr.handlePropose(cmd)
+				a.rstCh <- &queryRst{v: repl}
 
 			case "replicate":
 				// receive logs forwarded from leader
@@ -316,6 +293,30 @@ func (tr *TRaft) Loop() {
 			}
 		}
 	}
+}
+func (tr *TRaft) handlePropose(cmd *Cmd) *ProposeReply {
+	id := tr.Id
+	me := tr.Status[id]
+	now := uSecond()
+
+	if now > me.VoteExpireAt {
+		// no valid leader for now
+		return &ProposeReply{OK: false}
+	}
+
+	if me.VotedFor.Id != id {
+		return &ProposeReply{OK: false, OtherLeader: me.VotedFor.Clone()}
+	}
+
+	rec := tr.AddLog(cmd)
+	lg.Infow("hdl-propose", "overrides", rec.Overrides.DebugStr())
+
+	me.Accepted.Union(rec.Overrides)
+
+	// TODO send message to replicator.
+
+	return &ProposeReply{OK: true}
+
 }
 
 func (tr *TRaft) handleReplicate(req *ReplicateReq) *ReplicateReply {
@@ -482,27 +483,18 @@ var leaderLease = int64(time.Second * 1)
 // run forever to elect itself as leader if there is no leader in this cluster.
 func (tr *TRaft) VoteLoop() {
 
-	shutdown := tr.shutdown
 	act := tr.actionCh
 
-	running := true
 	id := tr.Id
 
 	// return true if shutting down
-	slp := func(sleep time.Duration) {
-		select {
-		case <-time.After(sleep):
-			// lg.Infow("VoteLoop woke up")
-		case <-shutdown:
-			running = false
-		}
-	}
+	slp := tr.sleep
 
 	maxStaleTermSleep := time.Millisecond * 200
 	heartBeatSleep := time.Millisecond * 200
 	followerSleep := time.Millisecond * 200
 
-	for running {
+	for tr.running {
 		leadst := query(act, "leaderStat", nil).v.(*LeaderStatus)
 
 		now := uSecond()
