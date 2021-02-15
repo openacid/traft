@@ -243,12 +243,12 @@ message VoteReply {
     repeated Record Logs = 30;
 }
 
-message ReplicateReq {
+message LogForwardReq {
     LeaderId Committer = 1;
     repeated Record Logs = 2;
 }
 
-message ReplicateReply {
+message LogForwardReply {
     bool OK = 10;
     // A replica responding a VotedFor with the same value with
     // ReplciateReq.Committer indicates the logs are accepted.
@@ -264,12 +264,13 @@ message ReplicateReply {
 
 message ProposeReply {
     bool OK = 2;
+    string Err = 3;
     // I am not leader, please redirect to `OtherLeader` to write to TRaft.
     LeaderId OtherLeader =1;
 }
 
 service TRaft {
     rpc Vote (VoteReq) returns (VoteReply) {}
-    rpc Replicate (ReplicateReq) returns (ReplicateReply) {}
+    rpc LogForward (LogForwardReq) returns (LogForwardReply) {}
     rpc Propose (Cmd) returns (ProposeReply) {}
 }

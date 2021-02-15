@@ -19,9 +19,13 @@ func cmpI64(a, b int64) int {
 	return 0
 }
 
-func uSecond() int64 {
+func uSecondI64() int64 {
+	return int64(uSecond())
+}
+
+func uSecond() time.Duration {
 	now := time.Now()
-	return int64(now.Unix())*1000*1000*1000 + int64(now.Nanosecond())
+	return time.Duration(now.Unix())*1000*1000*1000 + time.Duration(now.Nanosecond())
 }
 
 func join(ss ...string) string {
@@ -56,6 +60,7 @@ func serveCluster(ids []int64) []*TRaft {
 }
 
 // send rpc to addr.
+// TODO use a single loop to send to one replica
 func rpcTo(addr string,
 	action func(TRaftClient, context.Context)) {
 

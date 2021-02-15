@@ -199,7 +199,7 @@ func TestTRaft_Vote(t *testing.T) {
 			},
 			"%d-th: case: %+v", i+1, c)
 
-		ta.InDelta(int64(uSecond()+leaderLease), t1.Status[id].VoteExpireAt, 1000*1000*1000)
+		ta.InDelta(uSecondI64()+leaderLease, t1.Status[id].VoteExpireAt, 1000*1000*1000)
 	}
 }
 
@@ -365,9 +365,18 @@ func stopAll(ts []*TRaft) {
 	}
 }
 
-func readMsg3(ts []*TRaft) string {
+func readMsg(ts []*TRaft) string {
 
-	// n traft and a timeout
+	// var msg string
+	// select {
+	// case msg = <-ts[0].MsgCh:
+	// case msg = <-ts[1].MsgCh:
+	// case msg = <-ts[2].MsgCh:
+	// case <-time.After(time.Second):
+	//     panic("timeout")
+	// }
+
+	// n TRaft and a timeout
 	cases := make([]reflect.SelectCase, len(ts)+1)
 	for i, t := range ts {
 		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(t.MsgCh)}
@@ -382,24 +391,14 @@ func readMsg3(ts []*TRaft) string {
 
 	_ = ok
 
-	// t := ts[chosen]
 	msg := value.String()
-
-	// var msg string
-	// select {
-	// case msg = <-ts[0].MsgCh:
-	// case msg = <-ts[1].MsgCh:
-	// case msg = <-ts[2].MsgCh:
-	// case <-time.After(time.Second):
-	//     panic("timeout")
-	// }
-
 	return msg
 }
 
+// waiting for expected message substring to present n times.
 func waitForMsg(ts []*TRaft, msgs map[string]int) {
 	for {
-		msg := readMsg3(ts)
+		msg := readMsg(ts)
 		for s, _ := range msgs {
 			if strings.Contains(msg, s) {
 				msgs[s]--
@@ -447,11 +446,11 @@ func TestTRaft_VoteLoop(t *testing.T) {
 		})
 
 		ta.Equal(lid(1, 1), ts[0].Status[id1].VotedFor)
-		ta.InDelta(int64(uSecond()+leaderLease),
+		ta.InDelta(uSecondI64()+leaderLease,
 			ts[0].Status[id1].VoteExpireAt, 1000*1000*1000)
 
 		ta.Equal(lid(1, 1), ts[1].Status[id2].VotedFor)
-		ta.InDelta(int64(uSecond()+leaderLease),
+		ta.InDelta(uSecondI64()+leaderLease,
 			ts[1].Status[id2].VoteExpireAt, 1000*1000*1000)
 	})
 
@@ -470,7 +469,7 @@ func TestTRaft_VoteLoop(t *testing.T) {
 
 		ta.Equal(lid(1, 2), ts[1].Status[2].VotedFor)
 
-		ta.InDelta(int64(uSecond()+leaderLease),
+		ta.InDelta(uSecondI64()+leaderLease,
 			ts[1].Status[2].VoteExpireAt, 1000*1000*1000)
 	})
 
@@ -593,7 +592,20 @@ func TestTRaft_Propose(t *testing.T) {
 
 	lid := NewLeaderId
 
-	t.Run("id2MaxLog", func(t *testing.T) {
+	sendPropose := func(addr string, xcmd interface{}) *ProposeReply {
+		cmd := toCmd(xcmd)
+		var reply *ProposeReply
+		rpcTo(addr, func(cli TRaftClient, ctx context.Context) {
+			var err error
+			reply, err = cli.Propose(ctx, cmd)
+			if err != nil {
+				lg.Infow("err:", "err", err)
+			}
+		})
+		return reply
+	}
+
+	t.Run("invalidLeader", func(t *testing.T) {
 		ta := require.New(t)
 		_ = ta
 
@@ -609,27 +621,15 @@ func TestTRaft_Propose(t *testing.T) {
 
 		mems := ts[1].Config.Members
 
-		sendCmd := func(addr string, cmd *Cmd) *ProposeReply {
-			var reply *ProposeReply
-			rpcTo(addr, func(cli TRaftClient, ctx context.Context) {
-				var err error
-				reply, err = cli.Propose(ctx, cmd)
-				if err != nil {
-					panic("wtf")
-				}
-			})
-			return reply
-		}
-
 		// no leader elected, not allow to propose
-		reply := sendCmd(mems[1].Addr, NewCmdI64("foo", "x", 1))
+		reply := sendPropose(mems[1].Addr, NewCmdI64("foo", "x", 1))
 		ta.Equal(&ProposeReply{
 			OK:          false,
+			Err:         "vote expired",
 			OtherLeader: nil,
 		}, reply)
 
 		// elect ts[1]
-
 		go ts[1].VoteLoop()
 
 		waitForMsg(ts, map[string]int{
@@ -637,23 +637,54 @@ func TestTRaft_Propose(t *testing.T) {
 		})
 
 		// send to non-leader replica:
-		reply = sendCmd(mems[0].Addr, NewCmdI64("foo", "x", 1))
-		ta.Equal(&ProposeReply{OK: false, OtherLeader: NewLeaderId(4, 1)}, reply)
+		reply = sendPropose(mems[0].Addr, NewCmdI64("foo", "x", 1))
+		ta.Equal(&ProposeReply{
+			OK:          false,
+			Err:         "I am not leader",
+			OtherLeader: NewLeaderId(4, 1)}, reply)
+	})
+
+	t.Run("succ", func(t *testing.T) {
+
+		ta := require.New(t)
+
+		ids := []int64{0, 1, 2}
+		ts := serveCluster(ids)
+		defer stopAll(ts)
+
+		ts[0].initTraft(lid(2, 0), lid(1, 1), []int64{}, nil, nil, lid(0, 0))
+		ts[1].initTraft(lid(3, 1), lid(1, 1), []int64{}, nil, nil, lid(0, 1))
+		ts[2].initTraft(lid(1, 2), lid(2, 1), []int64{}, nil, []int64{0}, lid(0, 2))
+
+		ts[1].Status[1].VotedFor = NewLeaderId(3, 1)
+
+		mems := ts[1].Config.Members
+
+		// elect ts[1]
+		go ts[1].VoteLoop()
+
+		waitForMsg(ts, map[string]int{
+			"vote-win VotedFor:<Term:4 Id:1 >": 1,
+		})
+
+		// TODO check state of other replicas
 
 		// succ to propsoe
-		reply = sendCmd(mems[1].Addr, NewCmdI64("set", "y", 1))
-		ta.Equal(&ProposeReply{OK: true, OtherLeader: nil}, reply)
+		reply := sendPropose(mems[1].Addr, "y=1")
+		ta.Equal(&ProposeReply{OK: true}, reply)
 
-		ta.Equal(NewTailBitmap(0, 0), ts[1].Status[1].Accepted)
+		ta.Equal(NewTailBitmap(1), ts[1].Status[1].Accepted)
+		ta.Equal(NewTailBitmap(1), ts[1].Status[1].Committed)
 		ta.Equal(
 			join("[<004#001:000{set(y, 1)}-0:1→0>", "]"),
 			RecordsShortStr(ts[1].Logs, ""),
 		)
 
-		reply = sendCmd(mems[1].Addr, NewCmdI64("set", "y", 2))
+		reply = sendPropose(mems[1].Addr, "y=2")
 		ta.Equal(&ProposeReply{OK: true, OtherLeader: nil}, reply)
 
-		ta.Equal(NewTailBitmap(0, 0, 1), ts[1].Status[1].Accepted)
+		ta.Equal(NewTailBitmap(2), ts[1].Status[1].Accepted)
+		ta.Equal(NewTailBitmap(2), ts[1].Status[1].Committed)
 		ta.Equal(
 			join("[<004#001:000{set(y, 1)}-0:1→0>",
 				"<004#001:001{set(y, 2)}-0:3→0>",
@@ -661,7 +692,7 @@ func TestTRaft_Propose(t *testing.T) {
 			RecordsShortStr(ts[1].Logs, ""),
 		)
 
-		reply = sendCmd(mems[1].Addr, NewCmdI64("set", "x", 3))
+		reply = sendPropose(mems[1].Addr, "x=3")
 		ta.Equal(&ProposeReply{OK: true, OtherLeader: nil}, reply)
 
 		ta.Equal(NewTailBitmap(3), ts[1].Status[1].Accepted)
@@ -675,7 +706,7 @@ func TestTRaft_Propose(t *testing.T) {
 	})
 }
 
-func TestTRaft_Replicate(t *testing.T) {
+func TestTRaft_LogForward(t *testing.T) {
 
 	ta := require.New(t)
 	_ = ta
@@ -686,9 +717,7 @@ func TestTRaft_Replicate(t *testing.T) {
 	defer stopAll(ts)
 
 	lid := NewLeaderId
-	_ = lid
 	bm := NewTailBitmap
-	_ = bm
 
 	// init cluster
 	// give ts[1] a highest term thus to be a leader
@@ -700,11 +729,11 @@ func TestTRaft_Replicate(t *testing.T) {
 	ts[1].addlogs("x=0", "y=1", "x=2")
 	ts[2].addlogs("", "y=5")
 
-	sendReplicate := func(addr string, req *ReplicateReq) *ReplicateReply {
-		var reply *ReplicateReply
+	sendLogForward := func(addr string, req *LogForwardReq) *LogForwardReply {
+		var reply *LogForwardReply
 		rpcTo(addr, func(cli TRaftClient, ctx context.Context) {
 			var err error
-			reply, err = cli.Replicate(ctx, req)
+			reply, err = cli.LogForward(ctx, req)
 			if err != nil {
 				//	panic("wtf")
 			}
@@ -771,10 +800,10 @@ func TestTRaft_Replicate(t *testing.T) {
 			func(t *testing.T) {
 				dst := ts[c.to].Status[c.to]
 				dst.VotedFor = c.votedFor
-				dst.VoteExpireAt = uSecond() + c.expire
+				dst.VoteExpireAt = uSecondI64() + c.expire
 
 				addr := ts[1].Config.Members[c.to].Addr
-				repl := sendReplicate(addr, &ReplicateReq{
+				repl := sendLogForward(addr, &LogForwardReq{
 					Committer: c.committer,
 					Logs:      c.logs,
 				})
@@ -804,10 +833,7 @@ func TestTRaft_AddLog_nil(t *testing.T) {
 	id := int64(1)
 	tr := NewTRaft(id, map[int64]string{id: "123"})
 
-	tr.AddLog(NewCmdI64("set", "x", 1))
-	tr.AddLog(NewCmdI64("set", "y", 1))
-	tr.AddLog(nil)
-	tr.AddLog(NewCmdI64("set", "x", 1))
+	tr.addlogs("x=1", "y=1", nil, "x=1")
 
 	ta.Equal(join(
 		"[<000#001:000{set(x, 1)}-0:1→0>",

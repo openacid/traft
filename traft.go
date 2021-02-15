@@ -186,7 +186,7 @@ func (tr *TRaft) sendMsg(msg ...interface{}) {
 
 	select {
 	case tr.MsgCh <- vv:
-		lg.Infow("succ-send-msg", "msg", vv)
+		// lg.Infow("succ-send-msg", "msg", vv)
 	default:
 		lg.Infow("fail-send-msg", "msg", vv)
 	}

@@ -51,7 +51,7 @@ func (a *Cmd) Interfering(b *Cmd) bool {
 	return false
 }
 
-type toCmd interface {
+type toCmder interface {
 	ToCmd() *Cmd
 }
 
@@ -70,4 +70,20 @@ func (c *cstr) ToCmd() *Cmd {
 		panic(string(*c) + " convert to Cmd")
 	}
 	return NewCmdI64("set", k, v)
+}
+
+func toCmd(x interface{}) *Cmd {
+	if x == nil {
+		return nil
+	}
+
+	switch v := x.(type) {
+	case string:
+		s := cstr(v)
+		return s.ToCmd()
+
+	case *Cmd:
+		return v
+	}
+	panic("invalid type to convert to cmd")
 }
