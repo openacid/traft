@@ -84,10 +84,11 @@
     ```
 
 -   2021-02-16:
-    LOC: +288 -269
+    LOC: +1297 -592
 
     ```
     refactor: rename Replicate to LogForward
     refactor: vote_test: remove unused type, funcs
+    gruop daily log format by date
     ```
 

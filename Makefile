@@ -1,4 +1,6 @@
 include common.mk
 
 log:
-	git log --format="- %ai %s" --reverse  | grep 'day-' > docs/log.txt
+	./build-logs.sh
+
+update: log readme
