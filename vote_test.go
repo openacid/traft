@@ -34,6 +34,28 @@ type wantVoteReply struct {
 	logs         string
 }
 
+// a helper func to setup TRaft cluster and close it.
+// Because `defer tr.Stop()` does not block until the next test case
+func withCluster(t *testing.T,
+	name string,
+	ids []int64,
+	f func(t *testing.T, ts []*TRaft)) {
+
+	lid := NewLeaderId
+
+	ts := serveCluster(ids)
+	for i, id := range ids {
+		ts[i].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id))
+	}
+
+	t.Run(name, func(t *testing.T) {
+		f(t, ts)
+	})
+
+	stopAll(ts)
+
+}
+
 func TestTRaft_Vote(t *testing.T) {
 
 	ta := require.New(t)
@@ -391,168 +413,141 @@ func waitForMsg(ts []*TRaft, msgs map[string]int) {
 
 func TestTRaft_VoteLoop(t *testing.T) {
 
-	ta := require.New(t)
-	_ = ta
-
-	ids := []int64{1, 2, 3}
-	id1 := int64(1)
-	id2 := int64(2)
-	id3 := int64(3)
-
 	lid := NewLeaderId
+	bm := NewTailBitmap
 
-	t.Run("emptyVoters/candidate-1", func(t *testing.T) {
-		ta := require.New(t)
-		ts := serveCluster(ids)
-		defer stopAll(ts)
-		ts[0].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id1))
-		ts[1].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
-		ts[2].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
+	withCluster(t, "emptyVoters/candidate-1",
+		[]int64{0, 1, 2},
+		func(t *testing.T, ts []*TRaft) {
+			ta := require.New(t)
 
-		go ts[0].VoteLoop()
+			go ts[0].VoteLoop()
 
-		waitForMsg(ts, map[string]int{
-			"vote-win VotedFor:<Term:1 Id:1 >": 1,
+			waitForMsg(ts, map[string]int{
+				"vote-win VotedFor:<Term:1 >": 1,
+			})
+
+			ta.Equal(lid(1, 0), ts[0].Status[0].VotedFor)
+			ta.InDelta(uSecondI64()+leaderLease,
+				ts[0].Status[0].VoteExpireAt, 1000*1000*1000)
+
+			ta.Equal(lid(1, 0), ts[1].Status[1].VotedFor)
+			ta.InDelta(uSecondI64()+leaderLease,
+				ts[1].Status[1].VoteExpireAt, 1000*1000*1000)
 		})
 
-		ta.Equal(lid(1, 1), ts[0].Status[id1].VotedFor)
-		ta.InDelta(uSecondI64()+leaderLease,
-			ts[0].Status[id1].VoteExpireAt, 1000*1000*1000)
+	withCluster(t, "emptyVoters/candidate-2",
+		[]int64{0, 1, 2},
+		func(t *testing.T, ts []*TRaft) {
+			ta := require.New(t)
 
-		ta.Equal(lid(1, 1), ts[1].Status[id2].VotedFor)
-		ta.InDelta(uSecondI64()+leaderLease,
-			ts[1].Status[id2].VoteExpireAt, 1000*1000*1000)
-	})
+			go ts[1].VoteLoop()
+			waitForMsg(ts, map[string]int{
+				"vote-win VotedFor:<Term:1 Id:1 >": 1,
+			})
 
-	t.Run("emptyVoters/candidate-2", func(t *testing.T) {
-		ta := require.New(t)
-		ts := serveCluster(ids)
-		defer stopAll(ts)
-		ts[0].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id1))
-		ts[1].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
-		ts[2].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
+			ta.Equal(lid(1, 1), ts[1].Status[1].VotedFor)
 
-		go ts[1].VoteLoop()
-		waitForMsg(ts, map[string]int{
-			"vote-win VotedFor:<Term:1 Id:2 >": 1,
+			ta.InDelta(uSecondI64()+leaderLease,
+				ts[1].Status[1].VoteExpireAt, 1000*1000*1000)
 		})
 
-		ta.Equal(lid(1, 2), ts[1].Status[2].VotedFor)
+	withCluster(t, "emptyVoters/candidate-12",
+		[]int64{0, 1, 2},
+		func(t *testing.T, ts []*TRaft) {
 
-		ta.InDelta(uSecondI64()+leaderLease,
-			ts[1].Status[2].VoteExpireAt, 1000*1000*1000)
-	})
+			go ts[0].VoteLoop()
+			go ts[1].VoteLoop()
 
-	t.Run("emptyVoters/candidate-12", func(t *testing.T) {
-		ta := require.New(t)
-		_ = ta
-		ts := serveCluster(ids)
-		defer stopAll(ts)
-		ts[0].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id1))
-		ts[1].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
-		ts[2].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
-
-		go ts[0].VoteLoop()
-		go ts[1].VoteLoop()
-
-		// only one succ to elect.
-		// In 1 second, there wont be another winning election.
-		waitForMsg(ts, map[string]int{
-			"vote-win VotedFor:<Term:1 Id:2 >": 1,
-		})
-	})
-
-	t.Run("emptyVoters/candidate-123", func(t *testing.T) {
-		ta := require.New(t)
-		_ = ta
-		ts := serveCluster(ids)
-		defer stopAll(ts)
-		ts[0].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id1))
-		ts[1].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
-		ts[2].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
-
-		go ts[0].VoteLoop()
-		go ts[1].VoteLoop()
-		go ts[2].VoteLoop()
-
-		// only one succ to elect.
-		// In 1 second, there wont be another winning election.
-		waitForMsg(ts, map[string]int{
-			"vote-win":  1,
-			"vote-fail": 2,
-		})
-	})
-
-	t.Run("id2MaxCommitter", func(t *testing.T) {
-		ta := require.New(t)
-		_ = ta
-		ts := serveCluster(ids)
-		defer stopAll(ts)
-		ts[0].initTraft(lid(2, 1), lid(0, 1), []int64{2}, nil, nil, lid(0, id1))
-		ts[1].initTraft(lid(3, 2), lid(0, 1), []int64{2}, nil, nil, lid(0, id2))
-		ts[2].initTraft(lid(1, 3), lid(0, 1), []int64{2}, nil, nil, lid(0, id3))
-
-		go ts[0].VoteLoop()
-		go ts[1].VoteLoop()
-		go ts[2].VoteLoop()
-
-		// only one succ to elect.
-		// In 1 second, there wont be another winning election.
-		waitForMsg(ts, map[string]int{
-			"vote-win VotedFor:<Term:1 Id:2 >": 1,
-			"vote-fail":                        2,
-		})
-	})
-
-	t.Run("id2MaxLog", func(t *testing.T) {
-		// we need 5 replica to collect different log from 2 replica
-		ta := require.New(t)
-		_ = ta
-
-		ids := []int64{0, 1, 2, 3, 4}
-		ts := serveCluster(ids)
-		defer stopAll(ts)
-
-		ts[0].initTraft(lid(2, 0), lid(1, 1), []int64{0, 2}, nil, nil, lid(0, 0))
-		ts[1].initTraft(lid(3, 1), lid(1, 1), []int64{0, 4}, nil, nil, lid(0, 1))
-		ts[2].initTraft(lid(1, 2), lid(2, 1), []int64{0, 3}, nil, []int64{0}, lid(0, 2))
-		// ts[3].initTraft(lid(1, 2), lid(1, 1), []int64{0, 2, 3}, nil, nil, lid(0, 3))
-		// ts[4].initTraft(lid(1, 2), lid(1, 1), []int64{0, 2, 3}, nil, nil, lid(0, 4))
-
-		ts[3].Stop()
-		ts[4].Stop()
-		ts[1].Status[1].VotedFor = NewLeaderId(3, 1)
-		go ts[1].VoteLoop()
-
-		// only one succ to elect.
-		// In 1 second, there wont be another winning election.
-		waitForMsg(ts, map[string]int{
-			"vote-win VotedFor:<Term:4 Id:1 >": 1,
+			// only one succ to elect.
+			// In 1 second, there wont be another winning election.
+			waitForMsg(ts, map[string]int{
+				"vote-win VotedFor:<Term:1 Id:1 >": 1,
+			})
 		})
 
-		ta.Equal(
-			join("[<001#001:000{set(x, 0)}-0→0>",
-				"<>",
-				"<001#001:002{set(x, 2)}-0→0>",
-				"<002#001:003{set(x, 3)}-0→0>",
-				"<001#001:004{set(x, 4)}-0→0>]"),
-			RecordsShortStr(ts[1].Logs, ""),
-		)
+	withCluster(t, "emptyVoters/candidate-123",
+		[]int64{0, 1, 2},
+		func(t *testing.T, ts []*TRaft) {
 
-		ta.Equal(NewLeaderId(4, 1), ts[1].Status[1].Committer)
-		ta.Equal(NewTailBitmap(0, 0, 2, 3, 4), ts[1].Status[1].Accepted)
-		ta.Equal(NewTailBitmap(0), ts[1].Status[1].Committed)
+			go ts[0].VoteLoop()
+			go ts[1].VoteLoop()
+			go ts[2].VoteLoop()
 
-		ta.Equal(NewLeaderId(2, 0), ts[1].Status[0].Committer)
-		// using Equal to avoid comparison between nil and []int64{}
-		ta.True(NewTailBitmap(0).Equal(ts[1].Status[0].Accepted))
-		ta.True(NewTailBitmap(0).Equal(ts[1].Status[0].Committed))
+			// only one succ to elect.
+			// In 1 second, there wont be another winning election.
+			waitForMsg(ts, map[string]int{
+				"vote-win":  1,
+				"vote-fail": 2,
+			})
+		})
 
-		ta.Equal(NewLeaderId(1, 2), ts[1].Status[2].Committer)
-		// reduced Accepted to Committed
-		ta.Equal(NewTailBitmap(0, 0), ts[1].Status[2].Accepted)
-		ta.Equal(NewTailBitmap(0, 0), ts[1].Status[2].Committed)
-	})
+	withCluster(t, "id2MaxCommitter",
+		[]int64{0, 1, 2},
+		func(t *testing.T, ts []*TRaft) {
+			ts[0].initTraft(lid(2, 1), lid(0, 1), []int64{2}, nil, nil, lid(0, 0))
+			ts[1].initTraft(lid(3, 2), lid(0, 1), []int64{2}, nil, nil, lid(0, 1))
+			ts[2].initTraft(lid(1, 3), lid(0, 1), []int64{2}, nil, nil, lid(0, 2))
+
+			go ts[0].VoteLoop()
+			go ts[1].VoteLoop()
+			go ts[2].VoteLoop()
+
+			// only one succ to elect.
+			// In 1 second, there wont be another winning election.
+			waitForMsg(ts, map[string]int{
+				"vote-win VotedFor:<Term:1 Id:1 >": 1,
+				"vote-fail":                        2,
+			})
+		})
+
+	withCluster(t, "id2MaxLog",
+		[]int64{0, 1, 2, 3, 4},
+		func(t *testing.T, ts []*TRaft) {
+			// we need 5 replica to collect different log from 2 replica
+			ta := require.New(t)
+			_ = ta
+
+			ts[0].initTraft(lid(2, 0), lid(1, 1), []int64{0, 2}, nil, nil, lid(0, 0))
+			ts[1].initTraft(lid(3, 1), lid(1, 1), []int64{0, 4}, nil, nil, lid(0, 1))
+			ts[2].initTraft(lid(1, 2), lid(2, 1), []int64{0, 3}, nil, []int64{0}, lid(0, 2))
+			// ts[3].initTraft(lid(1, 2), lid(1, 1), []int64{0, 2, 3}, nil, nil, lid(0, 3))
+			// ts[4].initTraft(lid(1, 2), lid(1, 1), []int64{0, 2, 3}, nil, nil, lid(0, 4))
+
+			ts[3].Stop()
+			ts[4].Stop()
+			ts[1].Status[1].VotedFor = NewLeaderId(3, 1)
+			go ts[1].VoteLoop()
+
+			// only one succ to elect.
+			// In 1 second, there wont be another winning election.
+			waitForMsg(ts, map[string]int{
+				"vote-win VotedFor:<Term:4 Id:1 >": 1,
+			})
+
+			ta.Equal(
+				join("[<001#001:000{set(x, 0)}-0→0>",
+					"<>",
+					"<001#001:002{set(x, 2)}-0→0>",
+					"<002#001:003{set(x, 3)}-0→0>",
+					"<001#001:004{set(x, 4)}-0→0>]"),
+				RecordsShortStr(ts[1].Logs, ""),
+			)
+
+			ta.Equal(NewLeaderId(4, 1), ts[1].Status[1].Committer)
+			ta.Equal(bm(0, 0, 2, 3, 4), ts[1].Status[1].Accepted)
+			ta.Equal(bm(0), ts[1].Status[1].Committed)
+
+			ta.Equal(NewLeaderId(2, 0), ts[1].Status[0].Committer)
+			// using Equal to avoid comparison between nil and []int64{}
+			ta.True(bm(0).Equal(ts[1].Status[0].Accepted))
+			ta.True(bm(0).Equal(ts[1].Status[0].Committed))
+
+			ta.Equal(NewLeaderId(1, 2), ts[1].Status[2].Committer)
+			// reduced Accepted to Committed
+			ta.Equal(bm(0, 0), ts[1].Status[2].Accepted)
+			ta.Equal(bm(0, 0), ts[1].Status[2].Committed)
+		})
 }
 
 func TestTRaft_Propose(t *testing.T) {

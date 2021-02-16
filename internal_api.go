@@ -18,7 +18,7 @@ func (tr *TRaft) LogForward(ctx context.Context, req *LogForwardReq) (*LogForwar
 
 func (tr *TRaft) Propose(ctx context.Context, cmd *Cmd) (*ProposeReply, error) {
 	finCh := make(chan *ProposeReply, 1)
-	query(tr.actionCh, "propose", &proposeBody{cmd, finCh})
+	query(tr.actionCh, "propose", &proposeReq{cmd, finCh})
 
 	lg.Infow("waitingFor:finCh")
 	rst := <-finCh

@@ -4,112 +4,16 @@ package traft
 
 import (
 	context "context"
-	"encoding/json"
 	fmt "fmt"
 	"math/rand"
-	sync "sync"
 	"time"
 
 	"github.com/openacid/low/mathext/util"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-	grpc "google.golang.org/grpc"
 	// "google.golang.org/protobuf/proto"
 )
 
-var (
-	ErrStaleLog    = errors.New("local log is stale")
-	ErrStaleTermId = errors.New("local Term-Id is stale")
-	ErrTimeout     = errors.New("timeout")
-	ErrLeaderLost  = errors.New("leadership lost")
-)
-
-var (
-	llg = zap.NewNop()
-	lg  *zap.SugaredLogger
-)
-
-func init() {
-	// if os.Getenv("CLUSTER_DEBUG") != "" {
-	// }
-	var err error
-	// llg, err = zap.NewProduction()
-	llg, err = zap.NewDevelopment()
-	if err != nil {
-		panic(err)
-	}
-	lg = llg.Sugar()
-
-	// initZap()
-}
-
-func initZap() {
-	rawJSON := []byte(`{
-	  "level": "debug",
-	  "encoding": "json",
-	  "outputPaths": ["stdout", "/tmp/logs"],
-	  "errorOutputPaths": ["stderr"],
-	  "initialFields": {"foo": "bar"},
-	  "encoderConfig": {
-	    "messageKey": "message",
-	    "levelKey": "level",
-	    "levelEncoder": "lowercase"
-	  }
-	}`)
-
-	var cfg zap.Config
-	if err := json.Unmarshal(rawJSON, &cfg); err != nil {
-		panic(err)
-	}
-
-	var err error
-	llg, err = cfg.Build()
-	if err != nil {
-		panic(err)
-	}
-	defer llg.Sync()
-
-	llg.Info("logger construction succeeded")
-
-	lg = llg.Sugar()
-
-}
-
-type replicate struct {
-	committer *LeaderId
-	config    *ClusterConfig
-	log       *Record
-}
-
-type TRaft struct {
-	// TODO lock first
-	mu sync.Mutex
-
-	running bool
-
-	// close it to notify all goroutines to shutdown.
-	shutdown chan struct{}
-
-	// Communication channel with Loop().
-	// Only Loop() modifies state of TRaft.
-	// Other goroutines send an queryBody through this channel and wait for an
-	// operation reply.
-	actionCh chan *queryBody
-
-	replicationCh chan *replicate
-
-	// what log has been committed by replication
-	commitCh chan int64
-
-	// for external component to receive traft state changes.
-	MsgCh chan string
-
-	grpcServer *grpc.Server
-
-	wg sync.WaitGroup
-
-	Node
-}
+var leaderLease = int64(time.Second * 1)
 
 // init a TRaft for test, all logs are `set x=lsn`
 func (tr *TRaft) initTraft(
@@ -184,277 +88,6 @@ type leaderAndVotes struct {
 	votes      []*VoteReply
 }
 
-type queryRst struct {
-	logStat    *LogStatus
-	leaderStat *LeaderStatus
-	config     *ClusterConfig
-	voteReply  *VoteReply
-
-	v interface{}
-
-	ok bool
-}
-
-type queryBody struct {
-	operation string
-	arg       interface{}
-	rstCh     chan *queryRst
-}
-
-type proposeBody struct {
-	cmd   *Cmd
-	finCh chan *ProposeReply
-}
-
-// Loop handles actions from other components.
-func (tr *TRaft) Loop() {
-
-	shutdown := tr.shutdown
-	act := tr.actionCh
-
-	id := tr.Id
-
-	for {
-		select {
-		case <-shutdown:
-			return
-		case a := <-act:
-			switch a.operation {
-			case "logStat":
-				a.rstCh <- &queryRst{
-					v: ExportLogStatus(tr.Status[id]),
-				}
-			case "leaderStat":
-				lg.Infow("send-leader", "v", ExportLeaderStatus(tr.Status[id]))
-				a.rstCh <- &queryRst{
-					v: ExportLeaderStatus(tr.Status[id]),
-				}
-			case "config":
-				a.rstCh <- &queryRst{
-					v: tr.Config.Clone(),
-				}
-			case "vote":
-				a.rstCh <- &queryRst{
-					v: tr.internalVote(a.arg.(*VoteReq)),
-				}
-			case "update_leaderStat":
-				leadst := a.arg.(*LeaderStatus)
-				me := tr.Status[id]
-				if leadst.VotedFor.Cmp(me.VotedFor) >= 0 {
-					me.VotedFor = leadst.VotedFor.Clone()
-					me.VoteExpireAt = leadst.VoteExpireAt
-					a.rstCh <- &queryRst{ok: true}
-				} else {
-					a.rstCh <- &queryRst{ok: false}
-				}
-			case "update_leaderAndLog":
-				// TODO rename this operation
-
-				lal := a.arg.(*leaderAndVotes)
-				leadst := lal.leaderStat
-				votes := lal.votes
-
-				me := tr.Status[id]
-
-				if leadst.VotedFor.Cmp(me.VotedFor) >= 0 {
-					me.VotedFor = leadst.VotedFor.Clone()
-					me.VoteExpireAt = leadst.VoteExpireAt
-
-					tr.internalMergeLogs(votes)
-					// TODO update Committer to this replica
-					// then going on replicating these logs to others.
-					//
-					// TODO update local view of status of other replicas.
-					for _, v := range votes {
-						if v.Committer.Equal(me.Committer) {
-							tr.Status[v.Id].Accepted = v.Accepted.Clone()
-						} else {
-							// if committers are different, the leader can no be
-							// sure whether a follower has identical logs
-							tr.Status[v.Id].Accepted = v.Committed.Clone()
-						}
-						tr.Status[v.Id].Committed = v.Committed.Clone()
-
-						tr.Status[v.Id].Committer = v.Committer
-					}
-					me.Committer = leadst.VotedFor.Clone()
-					a.rstCh <- &queryRst{ok: true}
-				} else {
-					a.rstCh <- &queryRst{ok: false}
-				}
-
-			case "propose":
-				p := a.arg.(*proposeBody)
-				tr.handlePropose(p.cmd, p.finCh)
-				a.rstCh <- &queryRst{}
-
-			case "replicate":
-				// receive logs forwarded from leader
-				rreq := a.arg.(*LogForwardReq)
-				reply := tr.handleLogForward(rreq)
-				a.rstCh <- &queryRst{
-					ok: reply.OK,
-					v:  reply,
-				}
-
-			case "commit":
-				c := a.arg.(*commitReq)
-				me := tr.Status[id]
-				if c.committer.Equal(me.VotedFor) {
-					// Logs are intact.
-					// may be expired, Logs wont change unless VotedFor changes.
-
-					// NOTE: using start, end lsn to describe logs requires every
-					// forwarding action operates on continous logs
-					for i := c.lsns[0]; i < c.lsns[1]; i++ {
-						r := tr.Logs[i-tr.LogOffset]
-						me.Committed.Union(r.Overrides)
-					}
-
-					a.rstCh <- &queryRst{
-						ok: true,
-					}
-				} else {
-					// TODO elaborate error
-					a.rstCh <- &queryRst{
-						ok: false,
-					}
-				}
-			default:
-				panic("unknown action" + a.operation)
-			}
-		}
-	}
-}
-func (tr *TRaft) handlePropose(cmd *Cmd, finCh chan<- *ProposeReply) {
-	id := tr.Id
-	me := tr.Status[id]
-	now := uSecondI64()
-
-	if now > me.VoteExpireAt {
-		lg.Infow("hdl-propose:VoteExpired", "me.VoteExpireAt-now", me.VoteExpireAt-now)
-		// no valid leader for now
-		finCh <- &ProposeReply{
-			OK:  false,
-			Err: "vote expired",
-		}
-		lg.Infow("hdl-propose: returning")
-		return
-	}
-
-	if me.VotedFor.Id != id {
-		finCh <- &ProposeReply{
-			OK:          false,
-			Err:         "I am not leader",
-			OtherLeader: me.VotedFor.Clone(),
-		}
-		return
-	}
-
-	rec := tr.AddLog(cmd)
-	lg.Infow("hdl-propose:added-rec", "rec", rec.ShortStr(), "rec.Overrides:", rec.Overrides.DebugStr())
-
-	me.Accepted.Union(rec.Overrides)
-
-	go tr.forwardLog(
-		me.VotedFor.Clone(),
-		tr.Config.Clone(),
-		[]*Record{rec},
-		func(rst *logForwardRst) {
-			if rst.err != nil {
-				finCh <- &ProposeReply{
-					OK:  false,
-					Err: rst.err.Error(),
-				}
-			} else {
-				finCh <- &ProposeReply{
-					OK: true,
-				}
-			}
-		})
-}
-
-func (tr *TRaft) handleLogForward(req *LogForwardReq) *LogForwardReply {
-	id := tr.Id
-	me := tr.Status[id]
-	now := uSecondI64()
-	cr := req.Committer.Cmp(me.VotedFor)
-	// TODO what if req.Committer > me.VotedFor?
-	if cr != 0 || now > me.VoteExpireAt {
-		lg.Infow("hdl-replicate: illegal committer",
-			"req.Commiter", req.Committer,
-			"me.VotedFor", me.VotedFor,
-			"me.VoteExpireAt-now", me.VoteExpireAt-now)
-
-		return &LogForwardReply{
-			OK:       false,
-			VotedFor: me.VotedFor.Clone(),
-		}
-	}
-
-	cr = req.Committer.Cmp(me.Committer)
-	if cr > 0 {
-		lg.Infow("hdl-replicate: newer committer",
-			"req.Committer", req.Committer,
-			"me.Committer", me.Committer,
-		)
-
-		// if req.Committer is newer, discard all non-committed logs
-		me.Accepted = me.Committed.Clone()
-
-		i := len(tr.Logs) - 1
-		for ; i >= 0; i-- {
-			r := tr.Logs[i]
-			if r.Empty() {
-				continue
-			}
-
-			if me.Accepted.Get(r.Seq) == 0 {
-				tr.Logs[i] = &Record{}
-			}
-		}
-	}
-
-	// add new logs
-
-	newlogs := req.Logs
-	for _, r := range newlogs {
-		lsn := r.Seq
-		idx := lsn - tr.LogOffset
-
-		for int(idx) >= len(tr.Logs) {
-			tr.Logs = append(tr.Logs, &Record{})
-		}
-
-		if !tr.Logs[idx].Empty() && !tr.Logs[idx].Equal(r) {
-			panic("wtf")
-		}
-		tr.Logs[idx] = r
-
-		me.Accepted.Union(r.Overrides)
-	}
-
-	// TODO refine me
-	// remove empty logs at top
-	for len(tr.Logs) > 0 {
-		l := len(tr.Logs)
-		if tr.Logs[l-1].Empty() {
-			tr.Logs = tr.Logs[:l-1]
-		} else {
-			break
-		}
-	}
-
-	me.Committer = req.Committer.Clone()
-
-	return &LogForwardReply{
-		OK:        true,
-		VotedFor:  me.VotedFor.Clone(),
-		Accepted:  me.Accepted.Clone(),
-		Committed: me.Committed.Clone(),
-	}
-}
-
 // find the max committer log to fill in local log holes.
 func (tr *TRaft) internalMergeLogs(votes []*VoteReply) {
 
@@ -520,21 +153,6 @@ func (tr *TRaft) internalMergeLogs(votes []*VoteReply) {
 	}
 }
 
-// For other goroutine to ask mainloop to query
-func query(queryCh chan<- *queryBody, operation string, arg interface{}) *queryRst {
-	rstCh := make(chan *queryRst)
-	queryCh <- &queryBody{operation, arg, rstCh}
-	rst := <-rstCh
-	lg.Infow("chan-query",
-		"operation", operation,
-		"arg", arg,
-		"rst.ok", rst.ok,
-		"rst.v", toStr(rst.v))
-	return rst
-}
-
-var leaderLease = int64(time.Second * 1)
-
 // run forever to elect itself as leader if there is no leader in this cluster.
 func (tr *TRaft) VoteLoop() {
 
@@ -589,7 +207,7 @@ func (tr *TRaft) VoteLoop() {
 
 		{
 			// update local vote first
-			ok := query(act, "update_leaderStat", leadst).ok
+			ok := query(act, "set_voted", leadst).ok
 			if !ok {
 				// voted for other replica
 				leadst = query(act, "leaderStat", nil).v.(*LeaderStatus)
@@ -652,98 +270,6 @@ func (tr *TRaft) VoteLoop() {
 			// I can not be the leader.
 			// sleep a day. waiting for others to elect to be a leader.
 			slp(time.Second * 86400)
-		}
-	}
-}
-
-// the request sending to Loop() to commit a continous range of logs
-type commitReq struct {
-	committer *LeaderId
-	lsns      []int64
-}
-
-// the result of forwarding logs from leader to follower
-type logForwardRst struct {
-	from  *ReplicaInfo
-	reply *LogForwardReply
-	err   error
-}
-
-// forward log from leader to follower
-func (tr *TRaft) forwardLog(
-	committer *LeaderId,
-	config *ClusterConfig,
-	logs []*Record,
-	callback func(*logForwardRst),
-) {
-
-	lsns := []int64{logs[0].Seq, logs[len(logs)-1].Seq + 1}
-	lg.Infow("forward", "LSNs", lsns, "cmtr", committer)
-
-	req := &LogForwardReq{
-		Committer: committer,
-		Logs:      logs,
-	}
-
-	id := tr.Id
-
-	ch := make(chan *logForwardRst)
-
-	for _, m := range config.Members {
-		if m.Id == id {
-			continue
-		}
-
-		go func(ri ReplicaInfo) {
-			rpcTo(ri.Addr, func(cli TRaftClient, ctx context.Context) {
-				reply, err := cli.LogForward(ctx, req)
-				ch <- &logForwardRst{&ri, reply, err}
-			})
-		}(*m)
-	}
-
-	received := uint64(0)
-	// I vote myself
-	received |= 1 << uint(config.Members[id].Position)
-
-	forwardTimeout := uSecond() + time.Second
-
-	waiting := len(config.Members) - 1
-	for waiting > 0 {
-		select {
-		case <-time.After(forwardTimeout - uSecond()):
-			// timeout
-			// TODO cancel timer
-			lg.Infow("forward:timeout", "cmtr", committer.ShortStr())
-			callback(&logForwardRst{
-				err: errors.Wrapf(ErrTimeout, "forward"),
-			})
-			return
-		case res := <-ch:
-			waiting--
-			if res.err != nil {
-				continue
-			}
-
-			if res.reply.OK {
-				received |= 1 << uint(res.from.Position)
-				if config.IsQuorum(received) {
-					rst := query(tr.actionCh, "commit", &commitReq{
-						committer: committer,
-						lsns:      lsns,
-					})
-					if rst.ok {
-						lg.Infow("forward:a-quorum-done")
-						callback(&logForwardRst{})
-					} else {
-						// TODO let the root cause to generate the error
-						callback(&logForwardRst{
-							err: errors.Wrapf(ErrLeaderLost, "forward"),
-						})
-					}
-					return
-				}
-			}
 		}
 	}
 }
@@ -904,7 +430,7 @@ func (tr *TRaft) AddLog(cmd *Cmd) *Record {
 }
 
 // no lock protect, must be called by TRaft.Loop()
-func (tr *TRaft) internalVote(req *VoteReq) *VoteReply {
+func (tr *TRaft) hdlVoteReq(req *VoteReq) *VoteReply {
 
 	id := tr.Id
 
@@ -920,7 +446,15 @@ func (tr *TRaft) internalVote(req *VoteReq) *VoteReply {
 		Committed: me.Committed.Clone(),
 	}
 
-	lg.Infow("handleVoteReq", "Id", id, "me.VotedFor", me.VotedFor, "req.Candidate", req.Candidate)
+	lg.Infow("handleVoteReq",
+		"Id", id,
+		"req.Candidate", req.Candidate,
+		"me.Committer", me.Committer.ShortStr(),
+		"me.Accepted", me.Accepted.ShortStr(),
+		"me.VotedFor", me.VotedFor.ShortStr(),
+		"req.Committer", req.Committer.ShortStr(),
+		"req.Accepted", req.Accepted.ShortStr(),
+	)
 
 	if CmpLogStatus(req, me) < 0 {
 		// I have more logs than the candidate.
@@ -950,14 +484,15 @@ func (tr *TRaft) internalVote(req *VoteReq) *VoteReply {
 	}
 
 	// grant vote
-	me.VotedFor = req.Candidate.Clone()
-	me.VoteExpireAt = uSecondI64() + leaderLease
-	repl.VotedFor = req.Candidate.Clone()
 
 	lg.Infow("voted", "id", id, "VotedFor", me.VotedFor)
 	tr.sendMsg("hdl-vote-req:grant",
 		"req.Candidate", req.Candidate,
 		"me.VotedFor", me.VotedFor)
+
+	me.VotedFor = req.Candidate.Clone()
+	me.VoteExpireAt = uSecondI64() + leaderLease
+	repl.VotedFor = req.Candidate.Clone()
 
 	// send back the logs I have but the candidate does not.
 

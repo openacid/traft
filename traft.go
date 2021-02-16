@@ -3,16 +3,42 @@
 package traft
 
 import (
-	fmt "fmt"
+	"fmt"
 	"net"
 	"sort"
 	"strings"
-	sync "sync"
+	"sync"
 	"time"
 
 	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
+
+type TRaft struct {
+	running bool
+
+	// close it to notify all goroutines to shutdown.
+	shutdown chan struct{}
+
+	// Communication channel with Loop().
+	// Only Loop() modifies state of TRaft.
+	// Other goroutines send an queryBody through this channel and wait for an
+	// operation reply.
+	actionCh chan *queryBody
+
+	// for external component to receive traft state changes.
+	MsgCh chan string
+
+	grpcServer *grpc.Server
+
+	wg sync.WaitGroup
+
+	Node
+}
+
+func init() {
+	initLogging()
+}
 
 func NewTRaft(id int64, idAddrs map[int64]string) *TRaft {
 	_, ok := idAddrs[id]

@@ -8,6 +8,7 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 // option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.equal_all) = true;
+option (gogoproto.goproto_enum_prefix_all) = false;
 // option (gogoproto.goproto_stringer_all) = true;
 // option (gogoproto.goproto_getters_all) = false;
 
@@ -197,6 +198,20 @@ message ClusterConfig {
     map<int64, ReplicaInfo> Members = 11;
     repeated uint64 Quorums = 21;
 }
+
+//enum QueryOp {
+//    unknownOp = 0;
+//    getLogStat = 1;
+//    getLeaderStat = 2;
+//    getConfig =3;
+//    getVote = 4;
+//    setVoted = 5;
+//    setLeadership = 6;
+//    hdlProposeReq = 7;
+//    hdlLogForwardReq = 8;
+//    hdlCommitReq
+//
+//}
 
 message VoteReq {
     // who initiates the election
