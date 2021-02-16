@@ -1,4 +1,4 @@
 include common.mk
 
 log:
-	git log --format="- %s" --reverse  | grep 'day-' > docs/log.txt
+	git log --format="- %ai %s" --reverse  | grep 'day-' > docs/log.txt

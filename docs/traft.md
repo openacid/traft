@@ -9,6 +9,15 @@ generalized member change algo.
 
 ```go
 var (
+	ErrStaleLog    = errors.New("local log is stale")
+	ErrStaleTermId = errors.New("local Term-Id is stale")
+	ErrTimeout     = errors.New("timeout")
+	ErrLeaderLost  = errors.New("leadership lost")
+)
+```
+
+```go
+var (
 	ErrInvalidLengthTraft        = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflowTraft          = fmt.Errorf("proto: integer overflow")
 	ErrUnexpectedEndOfGroupTraft = fmt.Errorf("proto: unexpected end of group")
@@ -24,7 +33,7 @@ func CmpLogStatus(a, b logStat) int
 #### func  RecordsShortStr
 
 ```go
-func RecordsShortStr(rs []*Record) string
+func RecordsShortStr(rs []*Record, sep ...string) string
 ```
 
 #### func  RegisterTRaftServer
@@ -37,11 +46,17 @@ func RegisterTRaftServer(s *grpc.Server, srv TRaftServer)
 
 ```go
 type ClusterConfig struct {
-	Members []*ReplicaInfo `protobuf:"bytes,11,rep,name=Members,proto3" json:"Members,omitempty"`
-	Quorums []uint64       `protobuf:"varint,21,rep,packed,name=Quorums,proto3" json:"Quorums,omitempty"`
+	Members map[int64]*ReplicaInfo `protobuf:"bytes,11,rep,name=Members,proto3" json:"Members,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Quorums []uint64               `protobuf:"varint,21,rep,packed,name=Quorums,proto3" json:"Quorums,omitempty"`
 }
 ```
 
+
+#### func (*ClusterConfig) Clone
+
+```go
+func (cc *ClusterConfig) Clone() *ClusterConfig
+```
 
 #### func (*ClusterConfig) Descriptor
 
@@ -58,7 +73,7 @@ func (this *ClusterConfig) Equal(that interface{}) bool
 #### func (*ClusterConfig) GetMembers
 
 ```go
-func (m *ClusterConfig) GetMembers() []*ReplicaInfo
+func (m *ClusterConfig) GetMembers() map[int64]*ReplicaInfo
 ```
 
 #### func (*ClusterConfig) GetQuorums
@@ -67,11 +82,14 @@ func (m *ClusterConfig) GetMembers() []*ReplicaInfo
 func (m *ClusterConfig) GetQuorums() []uint64
 ```
 
-#### func (*ClusterConfig) GetReplicaInfo
+#### func (*ClusterConfig) IsQuorum
 
 ```go
-func (cc *ClusterConfig) GetReplicaInfo(id int64) *ReplicaInfo
+func (cc *ClusterConfig) IsQuorum(v uint64) bool
 ```
+check if a set of member is a quorum. The set of member is a bitmap in which a
+`1` indicates a present member. In this system, the position of `1` is
+ReplicaInfo.Position.
 
 #### func (*ClusterConfig) Marshal
 
@@ -91,6 +109,12 @@ func (m *ClusterConfig) MarshalTo(dAtA []byte) (int, error)
 func (m *ClusterConfig) MarshalToSizedBuffer(dAtA []byte) (int, error)
 ```
 
+#### func (*ClusterConfig) MaxPosition
+
+```go
+func (cc *ClusterConfig) MaxPosition() int64
+```
+
 #### func (*ClusterConfig) ProtoMessage
 
 ```go
@@ -107,6 +131,12 @@ func (m *ClusterConfig) Reset()
 
 ```go
 func (m *ClusterConfig) Size() (n int)
+```
+
+#### func (*ClusterConfig) SortedReplicaInfos
+
+```go
+func (cc *ClusterConfig) SortedReplicaInfos() []*ReplicaInfo
 ```
 
 #### func (*ClusterConfig) String
@@ -556,6 +586,483 @@ func (m *LeaderId) XXX_Size() int
 func (m *LeaderId) XXX_Unmarshal(b []byte) error
 ```
 
+#### type LeaderStatus
+
+```go
+type LeaderStatus struct {
+	VotedFor     *LeaderId `protobuf:"bytes,10,opt,name=VotedFor,proto3" json:"VotedFor,omitempty"`
+	VoteExpireAt int64     `protobuf:"varint,11,opt,name=VoteExpireAt,proto3" json:"VoteExpireAt,omitempty"`
+}
+```
+
+
+#### func  ExportLeaderStatus
+
+```go
+func ExportLeaderStatus(ls leaderStat) *LeaderStatus
+```
+
+#### func (*LeaderStatus) Descriptor
+
+```go
+func (*LeaderStatus) Descriptor() ([]byte, []int)
+```
+
+#### func (*LeaderStatus) Equal
+
+```go
+func (this *LeaderStatus) Equal(that interface{}) bool
+```
+
+#### func (*LeaderStatus) GetVoteExpireAt
+
+```go
+func (m *LeaderStatus) GetVoteExpireAt() int64
+```
+
+#### func (*LeaderStatus) GetVotedFor
+
+```go
+func (m *LeaderStatus) GetVotedFor() *LeaderId
+```
+
+#### func (*LeaderStatus) Marshal
+
+```go
+func (m *LeaderStatus) Marshal() (dAtA []byte, err error)
+```
+
+#### func (*LeaderStatus) MarshalTo
+
+```go
+func (m *LeaderStatus) MarshalTo(dAtA []byte) (int, error)
+```
+
+#### func (*LeaderStatus) MarshalToSizedBuffer
+
+```go
+func (m *LeaderStatus) MarshalToSizedBuffer(dAtA []byte) (int, error)
+```
+
+#### func (*LeaderStatus) ProtoMessage
+
+```go
+func (*LeaderStatus) ProtoMessage()
+```
+
+#### func (*LeaderStatus) Reset
+
+```go
+func (m *LeaderStatus) Reset()
+```
+
+#### func (*LeaderStatus) Size
+
+```go
+func (m *LeaderStatus) Size() (n int)
+```
+
+#### func (*LeaderStatus) String
+
+```go
+func (m *LeaderStatus) String() string
+```
+
+#### func (*LeaderStatus) Unmarshal
+
+```go
+func (m *LeaderStatus) Unmarshal(dAtA []byte) error
+```
+
+#### func (*LeaderStatus) XXX_DiscardUnknown
+
+```go
+func (m *LeaderStatus) XXX_DiscardUnknown()
+```
+
+#### func (*LeaderStatus) XXX_Marshal
+
+```go
+func (m *LeaderStatus) XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+```
+
+#### func (*LeaderStatus) XXX_Merge
+
+```go
+func (m *LeaderStatus) XXX_Merge(src proto.Message)
+```
+
+#### func (*LeaderStatus) XXX_Size
+
+```go
+func (m *LeaderStatus) XXX_Size() int
+```
+
+#### func (*LeaderStatus) XXX_Unmarshal
+
+```go
+func (m *LeaderStatus) XXX_Unmarshal(b []byte) error
+```
+
+#### type LogForwardReply
+
+```go
+type LogForwardReply struct {
+	OK bool `protobuf:"varint,10,opt,name=OK,proto3" json:"OK,omitempty"`
+	// A replica responding a VotedFor with the same value with
+	// ReplciateReq.Committer indicates the logs are accepted.
+	// Otherwise declined.
+	VotedFor  *LeaderId   `protobuf:"bytes,1,opt,name=VotedFor,proto3" json:"VotedFor,omitempty"`
+	Accepted  *TailBitmap `protobuf:"bytes,2,opt,name=Accepted,proto3" json:"Accepted,omitempty"`
+	Committed *TailBitmap `protobuf:"bytes,3,opt,name=Committed,proto3" json:"Committed,omitempty"`
+}
+```
+
+
+#### func (*LogForwardReply) Descriptor
+
+```go
+func (*LogForwardReply) Descriptor() ([]byte, []int)
+```
+
+#### func (*LogForwardReply) Equal
+
+```go
+func (this *LogForwardReply) Equal(that interface{}) bool
+```
+
+#### func (*LogForwardReply) GetAccepted
+
+```go
+func (m *LogForwardReply) GetAccepted() *TailBitmap
+```
+
+#### func (*LogForwardReply) GetCommitted
+
+```go
+func (m *LogForwardReply) GetCommitted() *TailBitmap
+```
+
+#### func (*LogForwardReply) GetOK
+
+```go
+func (m *LogForwardReply) GetOK() bool
+```
+
+#### func (*LogForwardReply) GetVotedFor
+
+```go
+func (m *LogForwardReply) GetVotedFor() *LeaderId
+```
+
+#### func (*LogForwardReply) Marshal
+
+```go
+func (m *LogForwardReply) Marshal() (dAtA []byte, err error)
+```
+
+#### func (*LogForwardReply) MarshalTo
+
+```go
+func (m *LogForwardReply) MarshalTo(dAtA []byte) (int, error)
+```
+
+#### func (*LogForwardReply) MarshalToSizedBuffer
+
+```go
+func (m *LogForwardReply) MarshalToSizedBuffer(dAtA []byte) (int, error)
+```
+
+#### func (*LogForwardReply) ProtoMessage
+
+```go
+func (*LogForwardReply) ProtoMessage()
+```
+
+#### func (*LogForwardReply) Reset
+
+```go
+func (m *LogForwardReply) Reset()
+```
+
+#### func (*LogForwardReply) Size
+
+```go
+func (m *LogForwardReply) Size() (n int)
+```
+
+#### func (*LogForwardReply) String
+
+```go
+func (m *LogForwardReply) String() string
+```
+
+#### func (*LogForwardReply) Unmarshal
+
+```go
+func (m *LogForwardReply) Unmarshal(dAtA []byte) error
+```
+
+#### func (*LogForwardReply) XXX_DiscardUnknown
+
+```go
+func (m *LogForwardReply) XXX_DiscardUnknown()
+```
+
+#### func (*LogForwardReply) XXX_Marshal
+
+```go
+func (m *LogForwardReply) XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+```
+
+#### func (*LogForwardReply) XXX_Merge
+
+```go
+func (m *LogForwardReply) XXX_Merge(src proto.Message)
+```
+
+#### func (*LogForwardReply) XXX_Size
+
+```go
+func (m *LogForwardReply) XXX_Size() int
+```
+
+#### func (*LogForwardReply) XXX_Unmarshal
+
+```go
+func (m *LogForwardReply) XXX_Unmarshal(b []byte) error
+```
+
+#### type LogForwardReq
+
+```go
+type LogForwardReq struct {
+	Committer *LeaderId `protobuf:"bytes,1,opt,name=Committer,proto3" json:"Committer,omitempty"`
+	Logs      []*Record `protobuf:"bytes,2,rep,name=Logs,proto3" json:"Logs,omitempty"`
+}
+```
+
+
+#### func (*LogForwardReq) Descriptor
+
+```go
+func (*LogForwardReq) Descriptor() ([]byte, []int)
+```
+
+#### func (*LogForwardReq) Equal
+
+```go
+func (this *LogForwardReq) Equal(that interface{}) bool
+```
+
+#### func (*LogForwardReq) GetCommitter
+
+```go
+func (m *LogForwardReq) GetCommitter() *LeaderId
+```
+
+#### func (*LogForwardReq) GetLogs
+
+```go
+func (m *LogForwardReq) GetLogs() []*Record
+```
+
+#### func (*LogForwardReq) Marshal
+
+```go
+func (m *LogForwardReq) Marshal() (dAtA []byte, err error)
+```
+
+#### func (*LogForwardReq) MarshalTo
+
+```go
+func (m *LogForwardReq) MarshalTo(dAtA []byte) (int, error)
+```
+
+#### func (*LogForwardReq) MarshalToSizedBuffer
+
+```go
+func (m *LogForwardReq) MarshalToSizedBuffer(dAtA []byte) (int, error)
+```
+
+#### func (*LogForwardReq) ProtoMessage
+
+```go
+func (*LogForwardReq) ProtoMessage()
+```
+
+#### func (*LogForwardReq) Reset
+
+```go
+func (m *LogForwardReq) Reset()
+```
+
+#### func (*LogForwardReq) Size
+
+```go
+func (m *LogForwardReq) Size() (n int)
+```
+
+#### func (*LogForwardReq) String
+
+```go
+func (m *LogForwardReq) String() string
+```
+
+#### func (*LogForwardReq) Unmarshal
+
+```go
+func (m *LogForwardReq) Unmarshal(dAtA []byte) error
+```
+
+#### func (*LogForwardReq) XXX_DiscardUnknown
+
+```go
+func (m *LogForwardReq) XXX_DiscardUnknown()
+```
+
+#### func (*LogForwardReq) XXX_Marshal
+
+```go
+func (m *LogForwardReq) XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+```
+
+#### func (*LogForwardReq) XXX_Merge
+
+```go
+func (m *LogForwardReq) XXX_Merge(src proto.Message)
+```
+
+#### func (*LogForwardReq) XXX_Size
+
+```go
+func (m *LogForwardReq) XXX_Size() int
+```
+
+#### func (*LogForwardReq) XXX_Unmarshal
+
+```go
+func (m *LogForwardReq) XXX_Unmarshal(b []byte) error
+```
+
+#### type LogStatus
+
+```go
+type LogStatus struct {
+	Committer *LeaderId   `protobuf:"bytes,4,opt,name=Committer,proto3" json:"Committer,omitempty"`
+	Accepted  *TailBitmap `protobuf:"bytes,1,opt,name=Accepted,proto3" json:"Accepted,omitempty"`
+}
+```
+
+
+#### func  ExportLogStatus
+
+```go
+func ExportLogStatus(ls logStat) *LogStatus
+```
+
+#### func (*LogStatus) Descriptor
+
+```go
+func (*LogStatus) Descriptor() ([]byte, []int)
+```
+
+#### func (*LogStatus) Equal
+
+```go
+func (this *LogStatus) Equal(that interface{}) bool
+```
+
+#### func (*LogStatus) GetAccepted
+
+```go
+func (m *LogStatus) GetAccepted() *TailBitmap
+```
+
+#### func (*LogStatus) GetCommitter
+
+```go
+func (m *LogStatus) GetCommitter() *LeaderId
+```
+
+#### func (*LogStatus) Marshal
+
+```go
+func (m *LogStatus) Marshal() (dAtA []byte, err error)
+```
+
+#### func (*LogStatus) MarshalTo
+
+```go
+func (m *LogStatus) MarshalTo(dAtA []byte) (int, error)
+```
+
+#### func (*LogStatus) MarshalToSizedBuffer
+
+```go
+func (m *LogStatus) MarshalToSizedBuffer(dAtA []byte) (int, error)
+```
+
+#### func (*LogStatus) ProtoMessage
+
+```go
+func (*LogStatus) ProtoMessage()
+```
+
+#### func (*LogStatus) Reset
+
+```go
+func (m *LogStatus) Reset()
+```
+
+#### func (*LogStatus) Size
+
+```go
+func (m *LogStatus) Size() (n int)
+```
+
+#### func (*LogStatus) String
+
+```go
+func (m *LogStatus) String() string
+```
+
+#### func (*LogStatus) Unmarshal
+
+```go
+func (m *LogStatus) Unmarshal(dAtA []byte) error
+```
+
+#### func (*LogStatus) XXX_DiscardUnknown
+
+```go
+func (m *LogStatus) XXX_DiscardUnknown()
+```
+
+#### func (*LogStatus) XXX_Marshal
+
+```go
+func (m *LogStatus) XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+```
+
+#### func (*LogStatus) XXX_Merge
+
+```go
+func (m *LogStatus) XXX_Merge(src proto.Message)
+```
+
+#### func (*LogStatus) XXX_Size
+
+```go
+func (m *LogStatus) XXX_Size() int
+```
+
+#### func (*LogStatus) XXX_Unmarshal
+
+```go
+func (m *LogStatus) XXX_Unmarshal(b []byte) error
+```
+
 #### type Node
 
 ```go
@@ -571,12 +1078,6 @@ type Node struct {
 }
 ```
 
-
-#### func  NewNode
-
-```go
-func NewNode(id int64, idAddrs map[int64]string) *Node
-```
 
 #### func (*Node) Descriptor
 
@@ -698,6 +1199,126 @@ func (m *Node) XXX_Size() int
 func (m *Node) XXX_Unmarshal(b []byte) error
 ```
 
+#### type ProposeReply
+
+```go
+type ProposeReply struct {
+	OK  bool   `protobuf:"varint,2,opt,name=OK,proto3" json:"OK,omitempty"`
+	Err string `protobuf:"bytes,3,opt,name=Err,proto3" json:"Err,omitempty"`
+	// I am not leader, please redirect to `OtherLeader` to write to TRaft.
+	OtherLeader *LeaderId `protobuf:"bytes,1,opt,name=OtherLeader,proto3" json:"OtherLeader,omitempty"`
+}
+```
+
+
+#### func (*ProposeReply) Descriptor
+
+```go
+func (*ProposeReply) Descriptor() ([]byte, []int)
+```
+
+#### func (*ProposeReply) Equal
+
+```go
+func (this *ProposeReply) Equal(that interface{}) bool
+```
+
+#### func (*ProposeReply) GetErr
+
+```go
+func (m *ProposeReply) GetErr() string
+```
+
+#### func (*ProposeReply) GetOK
+
+```go
+func (m *ProposeReply) GetOK() bool
+```
+
+#### func (*ProposeReply) GetOtherLeader
+
+```go
+func (m *ProposeReply) GetOtherLeader() *LeaderId
+```
+
+#### func (*ProposeReply) Marshal
+
+```go
+func (m *ProposeReply) Marshal() (dAtA []byte, err error)
+```
+
+#### func (*ProposeReply) MarshalTo
+
+```go
+func (m *ProposeReply) MarshalTo(dAtA []byte) (int, error)
+```
+
+#### func (*ProposeReply) MarshalToSizedBuffer
+
+```go
+func (m *ProposeReply) MarshalToSizedBuffer(dAtA []byte) (int, error)
+```
+
+#### func (*ProposeReply) ProtoMessage
+
+```go
+func (*ProposeReply) ProtoMessage()
+```
+
+#### func (*ProposeReply) Reset
+
+```go
+func (m *ProposeReply) Reset()
+```
+
+#### func (*ProposeReply) Size
+
+```go
+func (m *ProposeReply) Size() (n int)
+```
+
+#### func (*ProposeReply) String
+
+```go
+func (m *ProposeReply) String() string
+```
+
+#### func (*ProposeReply) Unmarshal
+
+```go
+func (m *ProposeReply) Unmarshal(dAtA []byte) error
+```
+
+#### func (*ProposeReply) XXX_DiscardUnknown
+
+```go
+func (m *ProposeReply) XXX_DiscardUnknown()
+```
+
+#### func (*ProposeReply) XXX_Marshal
+
+```go
+func (m *ProposeReply) XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+```
+
+#### func (*ProposeReply) XXX_Merge
+
+```go
+func (m *ProposeReply) XXX_Merge(src proto.Message)
+```
+
+#### func (*ProposeReply) XXX_Size
+
+```go
+func (m *ProposeReply) XXX_Size() int
+```
+
+#### func (*ProposeReply) XXX_Unmarshal
+
+```go
+func (m *ProposeReply) XXX_Unmarshal(b []byte) error
+```
+
 #### type Record
 
 ```go
@@ -717,6 +1338,9 @@ type Record struct {
 	Seq int64 `protobuf:"varint,10,opt,name=Seq,proto3" json:"Seq,omitempty"`
 	// Cmd describes what this log does.
 	Cmd *Cmd `protobuf:"bytes,30,opt,name=Cmd,proto3" json:"Cmd,omitempty"`
+	// The logs that must be executed before this one.
+	// Normally it is the least lsn on a leader that is not purged yet.
+	Depends *TailBitmap `protobuf:"bytes,32,opt,name=Depends,proto3" json:"Depends,omitempty"`
 	// Overrides describes what previous logs this log record overrides.
 	Overrides *TailBitmap `protobuf:"bytes,40,opt,name=Overrides,proto3" json:"Overrides,omitempty"`
 }
@@ -761,6 +1385,12 @@ func (m *Record) GetAuthor() *LeaderId
 
 ```go
 func (m *Record) GetCmd() *Cmd
+```
+
+#### func (*Record) GetDepends
+
+```go
+func (m *Record) GetDepends() *TailBitmap
 ```
 
 #### func (*Record) GetOverrides
@@ -871,6 +1501,8 @@ func (m *Record) XXX_Unmarshal(b []byte) error
 type ReplicaInfo struct {
 	Id   int64  `protobuf:"varint,1,opt,name=Id,proto3" json:"Id,omitempty"`
 	Addr string `protobuf:"bytes,2,opt,name=Addr,proto3" json:"Addr,omitempty"`
+	// Position indicates the index of this member in its cluster.
+	Position int64 `protobuf:"varint,3,opt,name=Position,proto3" json:"Position,omitempty"`
 }
 ```
 
@@ -897,6 +1529,12 @@ func (m *ReplicaInfo) GetAddr() string
 
 ```go
 func (m *ReplicaInfo) GetId() int64
+```
+
+#### func (*ReplicaInfo) GetPosition
+
+```go
+func (m *ReplicaInfo) GetPosition() int64
 ```
 
 #### func (*ReplicaInfo) Marshal
@@ -996,6 +1634,9 @@ type ReplicaStatus struct {
 	// Before receiving a message, VotedFor is the leader this replica knows of,
 	// Accepted is nil.
 	VotedFor *LeaderId `protobuf:"bytes,10,opt,name=VotedFor,proto3" json:"VotedFor,omitempty"`
+	// at what time the voted value expires,
+	// in unix time in nanosecond: 10^-9 second
+	VoteExpireAt int64 `protobuf:"varint,11,opt,name=VoteExpireAt,proto3" json:"VoteExpireAt,omitempty"`
 	// The Leader tried to commit all of the local logs.
 	// The Committer is the same as Author if a log entry is committed by its
 	// Author.
@@ -1056,6 +1697,12 @@ func (m *ReplicaStatus) GetCommitted() *TailBitmap
 
 ```go
 func (m *ReplicaStatus) GetCommitter() *LeaderId
+```
+
+#### func (*ReplicaStatus) GetVoteExpireAt
+
+```go
+func (m *ReplicaStatus) GetVoteExpireAt() int64
 ```
 
 #### func (*ReplicaStatus) GetVotedFor
@@ -1142,259 +1789,80 @@ func (m *ReplicaStatus) XXX_Size() int
 func (m *ReplicaStatus) XXX_Unmarshal(b []byte) error
 ```
 
-#### type ReplicateReply
-
-```go
-type ReplicateReply struct {
-	// A replica responding a VotedFor with the same value with
-	// ReplciateReq.Committer indicates the logs are accepted.
-	// Otherwise declined.
-	VotedFor  *LeaderId   `protobuf:"bytes,1,opt,name=VotedFor,proto3" json:"VotedFor,omitempty"`
-	Accepted  *TailBitmap `protobuf:"bytes,2,opt,name=Accepted,proto3" json:"Accepted,omitempty"`
-	Committed *TailBitmap `protobuf:"bytes,3,opt,name=Committed,proto3" json:"Committed,omitempty"`
-}
-```
-
-
-#### func (*ReplicateReply) Descriptor
-
-```go
-func (*ReplicateReply) Descriptor() ([]byte, []int)
-```
-
-#### func (*ReplicateReply) Equal
-
-```go
-func (this *ReplicateReply) Equal(that interface{}) bool
-```
-
-#### func (*ReplicateReply) GetAccepted
-
-```go
-func (m *ReplicateReply) GetAccepted() *TailBitmap
-```
-
-#### func (*ReplicateReply) GetCommitted
-
-```go
-func (m *ReplicateReply) GetCommitted() *TailBitmap
-```
-
-#### func (*ReplicateReply) GetVotedFor
-
-```go
-func (m *ReplicateReply) GetVotedFor() *LeaderId
-```
-
-#### func (*ReplicateReply) Marshal
-
-```go
-func (m *ReplicateReply) Marshal() (dAtA []byte, err error)
-```
-
-#### func (*ReplicateReply) MarshalTo
-
-```go
-func (m *ReplicateReply) MarshalTo(dAtA []byte) (int, error)
-```
-
-#### func (*ReplicateReply) MarshalToSizedBuffer
-
-```go
-func (m *ReplicateReply) MarshalToSizedBuffer(dAtA []byte) (int, error)
-```
-
-#### func (*ReplicateReply) ProtoMessage
-
-```go
-func (*ReplicateReply) ProtoMessage()
-```
-
-#### func (*ReplicateReply) Reset
-
-```go
-func (m *ReplicateReply) Reset()
-```
-
-#### func (*ReplicateReply) Size
-
-```go
-func (m *ReplicateReply) Size() (n int)
-```
-
-#### func (*ReplicateReply) String
-
-```go
-func (m *ReplicateReply) String() string
-```
-
-#### func (*ReplicateReply) Unmarshal
-
-```go
-func (m *ReplicateReply) Unmarshal(dAtA []byte) error
-```
-
-#### func (*ReplicateReply) XXX_DiscardUnknown
-
-```go
-func (m *ReplicateReply) XXX_DiscardUnknown()
-```
-
-#### func (*ReplicateReply) XXX_Marshal
-
-```go
-func (m *ReplicateReply) XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
-```
-
-#### func (*ReplicateReply) XXX_Merge
-
-```go
-func (m *ReplicateReply) XXX_Merge(src proto.Message)
-```
-
-#### func (*ReplicateReply) XXX_Size
-
-```go
-func (m *ReplicateReply) XXX_Size() int
-```
-
-#### func (*ReplicateReply) XXX_Unmarshal
-
-```go
-func (m *ReplicateReply) XXX_Unmarshal(b []byte) error
-```
-
-#### type ReplicateReq
-
-```go
-type ReplicateReq struct {
-	Committer *LeaderId `protobuf:"bytes,1,opt,name=Committer,proto3" json:"Committer,omitempty"`
-	Logs      []*Record `protobuf:"bytes,2,rep,name=Logs,proto3" json:"Logs,omitempty"`
-}
-```
-
-
-#### func (*ReplicateReq) Descriptor
-
-```go
-func (*ReplicateReq) Descriptor() ([]byte, []int)
-```
-
-#### func (*ReplicateReq) Equal
-
-```go
-func (this *ReplicateReq) Equal(that interface{}) bool
-```
-
-#### func (*ReplicateReq) GetCommitter
-
-```go
-func (m *ReplicateReq) GetCommitter() *LeaderId
-```
-
-#### func (*ReplicateReq) GetLogs
-
-```go
-func (m *ReplicateReq) GetLogs() []*Record
-```
-
-#### func (*ReplicateReq) Marshal
-
-```go
-func (m *ReplicateReq) Marshal() (dAtA []byte, err error)
-```
-
-#### func (*ReplicateReq) MarshalTo
-
-```go
-func (m *ReplicateReq) MarshalTo(dAtA []byte) (int, error)
-```
-
-#### func (*ReplicateReq) MarshalToSizedBuffer
-
-```go
-func (m *ReplicateReq) MarshalToSizedBuffer(dAtA []byte) (int, error)
-```
-
-#### func (*ReplicateReq) ProtoMessage
-
-```go
-func (*ReplicateReq) ProtoMessage()
-```
-
-#### func (*ReplicateReq) Reset
-
-```go
-func (m *ReplicateReq) Reset()
-```
-
-#### func (*ReplicateReq) Size
-
-```go
-func (m *ReplicateReq) Size() (n int)
-```
-
-#### func (*ReplicateReq) String
-
-```go
-func (m *ReplicateReq) String() string
-```
-
-#### func (*ReplicateReq) Unmarshal
-
-```go
-func (m *ReplicateReq) Unmarshal(dAtA []byte) error
-```
-
-#### func (*ReplicateReq) XXX_DiscardUnknown
-
-```go
-func (m *ReplicateReq) XXX_DiscardUnknown()
-```
-
-#### func (*ReplicateReq) XXX_Marshal
-
-```go
-func (m *ReplicateReq) XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
-```
-
-#### func (*ReplicateReq) XXX_Merge
-
-```go
-func (m *ReplicateReq) XXX_Merge(src proto.Message)
-```
-
-#### func (*ReplicateReq) XXX_Size
-
-```go
-func (m *ReplicateReq) XXX_Size() int
-```
-
-#### func (*ReplicateReq) XXX_Unmarshal
-
-```go
-func (m *ReplicateReq) XXX_Unmarshal(b []byte) error
-```
-
 #### type TRaft
 
 ```go
 type TRaft struct {
+
+	// for external component to receive traft state changes.
+	MsgCh chan string
+
 	Node
 }
 ```
 
+
+#### func  NewTRaft
+
+```go
+func NewTRaft(id int64, idAddrs map[int64]string) *TRaft
+```
 
 #### func (*TRaft) AddLog
 
 ```go
 func (tr *TRaft) AddLog(cmd *Cmd) *Record
 ```
+Only a established leader should use this func. no lock protection, must be
+called from Loop()
 
-#### func (*TRaft) Replicate
+#### func (*TRaft) LogForward
 
 ```go
-func (tr *TRaft) Replicate(ctx context.Context, req *ReplicateReq) (*ReplicateReply, error)
+func (tr *TRaft) LogForward(ctx context.Context, req *LogForwardReq) (*LogForwardReply, error)
+```
+
+#### func (*TRaft) Loop
+
+```go
+func (tr *TRaft) Loop()
+```
+Loop handles actions from other components.
+
+#### func (*TRaft) Propose
+
+```go
+func (tr *TRaft) Propose(ctx context.Context, cmd *Cmd) (*ProposeReply, error)
+```
+
+#### func (*TRaft) Start
+
+```go
+func (tr *TRaft) Start()
+```
+
+#### func (*TRaft) StartMainLoop
+
+```go
+func (tr *TRaft) StartMainLoop()
+```
+
+#### func (*TRaft) StartServer
+
+```go
+func (tr *TRaft) StartServer()
+```
+
+#### func (*TRaft) StartVoteLoop
+
+```go
+func (tr *TRaft) StartVoteLoop()
+```
+
+#### func (*TRaft) Stop
+
+```go
+func (tr *TRaft) Stop()
 ```
 
 #### func (*TRaft) Vote
@@ -1403,12 +1871,20 @@ func (tr *TRaft) Replicate(ctx context.Context, req *ReplicateReq) (*ReplicateRe
 func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error)
 ```
 
+#### func (*TRaft) VoteLoop
+
+```go
+func (tr *TRaft) VoteLoop()
+```
+run forever to elect itself as leader if there is no leader in this cluster.
+
 #### type TRaftClient
 
 ```go
 type TRaftClient interface {
 	Vote(ctx context.Context, in *VoteReq, opts ...grpc.CallOption) (*VoteReply, error)
-	Replicate(ctx context.Context, in *ReplicateReq, opts ...grpc.CallOption) (*ReplicateReply, error)
+	LogForward(ctx context.Context, in *LogForwardReq, opts ...grpc.CallOption) (*LogForwardReply, error)
+	Propose(ctx context.Context, in *Cmd, opts ...grpc.CallOption) (*ProposeReply, error)
 }
 ```
 
@@ -1428,7 +1904,8 @@ func NewTRaftClient(cc *grpc.ClientConn) TRaftClient
 ```go
 type TRaftServer interface {
 	Vote(context.Context, *VoteReq) (*VoteReply, error)
-	Replicate(context.Context, *ReplicateReq) (*ReplicateReply, error)
+	LogForward(context.Context, *LogForwardReq) (*LogForwardReply, error)
+	Propose(context.Context, *Cmd) (*ProposeReply, error)
 }
 ```
 
@@ -1487,6 +1964,12 @@ func (tb *TailBitmap) Compact()
 Compact all leading all-ones words in the bitmap.
 
 Since 0.1.22
+
+#### func (*TailBitmap) DebugStr
+
+```go
+func (tb *TailBitmap) DebugStr() string
+```
 
 #### func (*TailBitmap) Descriptor
 
@@ -1590,6 +2073,12 @@ Set the bit at `idx` to `1`.
 
 Since 0.1.22
 
+#### func (*TailBitmap) ShortStr
+
+```go
+func (tb *TailBitmap) ShortStr() string
+```
+
 #### func (*TailBitmap) Size
 
 ```go
@@ -1654,10 +2143,16 @@ type UnimplementedTRaftServer struct {
 UnimplementedTRaftServer can be embedded to have forward compatible
 implementations.
 
-#### func (*UnimplementedTRaftServer) Replicate
+#### func (*UnimplementedTRaftServer) LogForward
 
 ```go
-func (*UnimplementedTRaftServer) Replicate(ctx context.Context, req *ReplicateReq) (*ReplicateReply, error)
+func (*UnimplementedTRaftServer) LogForward(ctx context.Context, req *LogForwardReq) (*LogForwardReply, error)
+```
+
+#### func (*UnimplementedTRaftServer) Propose
+
+```go
+func (*UnimplementedTRaftServer) Propose(ctx context.Context, req *Cmd) (*ProposeReply, error)
 ```
 
 #### func (*UnimplementedTRaftServer) Vote
@@ -1670,18 +2165,37 @@ func (*UnimplementedTRaftServer) Vote(ctx context.Context, req *VoteReq) (*VoteR
 
 ```go
 type VoteReply struct {
+	// the replica id this reply comes from
+	Id int64 `protobuf:"varint,1,opt,name=Id,proto3" json:"Id,omitempty"`
 	// voted for a candidate or the previous voted other leader.
 	VotedFor *LeaderId `protobuf:"bytes,10,opt,name=VotedFor,proto3" json:"VotedFor,omitempty"`
 	// latest log committer.
 	Committer *LeaderId `protobuf:"bytes,4,opt,name=Committer,proto3" json:"Committer,omitempty"`
 	// what logs I have.
-	Accepted *TailBitmap `protobuf:"bytes,1,opt,name=Accepted,proto3" json:"Accepted,omitempty"`
+	Accepted  *TailBitmap `protobuf:"bytes,21,opt,name=Accepted,proto3" json:"Accepted,omitempty"`
+	Committed *TailBitmap `protobuf:"bytes,22,opt,name=Committed,proto3" json:"Committed,omitempty"`
 	// The logs that voter has but leader candidate does not have.
 	// For the leader to rebuild all possibly committed logs from a quorum.
 	Logs []*Record `protobuf:"bytes,30,rep,name=Logs,proto3" json:"Logs,omitempty"`
 }
 ```
 
+
+#### func  VoteOnce
+
+```go
+func VoteOnce(
+	candidate *LeaderId,
+	logStatus logStat,
+	config *ClusterConfig,
+) ([]*VoteReply, error, int64)
+```
+returns: VoteReply-s: if vote granted by a quorum, returns collected replies.
+
+    Otherwise returns nil.
+
+error: ErrStaleLog, ErrStaleTermId, ErrTimeout. higherTerm: if seen, upgrade
+term and retry
 
 #### func (*VoteReply) Descriptor
 
@@ -1701,10 +2215,22 @@ func (this *VoteReply) Equal(that interface{}) bool
 func (m *VoteReply) GetAccepted() *TailBitmap
 ```
 
+#### func (*VoteReply) GetCommitted
+
+```go
+func (m *VoteReply) GetCommitted() *TailBitmap
+```
+
 #### func (*VoteReply) GetCommitter
 
 ```go
 func (m *VoteReply) GetCommitter() *LeaderId
+```
+
+#### func (*VoteReply) GetId
+
+```go
+func (m *VoteReply) GetId() int64
 ```
 
 #### func (*VoteReply) GetLogs
@@ -1736,6 +2262,13 @@ func (m *VoteReply) MarshalTo(dAtA []byte) (int, error)
 ```go
 func (m *VoteReply) MarshalToSizedBuffer(dAtA []byte) (int, error)
 ```
+
+#### func (*VoteReply) PopRecord
+
+```go
+func (v *VoteReply) PopRecord(lsn int64) *Record
+```
+if the first log in v.Logs matches lsn, pop and return it. Otherwise return nil.
 
 #### func (*VoteReply) ProtoMessage
 
