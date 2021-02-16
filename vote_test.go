@@ -53,12 +53,13 @@ func withCluster(t *testing.T,
 	})
 
 	stopAll(ts)
-
 }
 
 func TestTRaft_Vote(t *testing.T) {
 
 	ta := require.New(t)
+
+	bm := NewTailBitmap
 
 	ids := []int64{1, 2, 3}
 	id := int64(1)
@@ -81,7 +82,7 @@ func TestTRaft_Vote(t *testing.T) {
 		req := &VoteReq{
 			Candidate: cand.candidateId,
 			Committer: cand.committer,
-			Accepted:  NewTailBitmap(0, cand.logs...),
+			Accepted:  bm(0, cand.logs...),
 		}
 
 		var reply *VoteReply
@@ -112,7 +113,7 @@ func TestTRaft_Vote(t *testing.T) {
 			wantVoteReply{
 				votedFor:     lid(2, 2),
 				committer:    lid(0, id),
-				allLogBitmap: NewTailBitmap(0, 5, 6),
+				allLogBitmap: bm(0, 5, 6),
 				logs:         "[<001#001:006{set(x, 6)}-0→0>]",
 			},
 		},
@@ -125,7 +126,7 @@ func TestTRaft_Vote(t *testing.T) {
 			wantVoteReply{
 				votedFor:     lid(2, 2),
 				committer:    lid(0, id),
-				allLogBitmap: NewTailBitmap(0, 5, 6, 7),
+				allLogBitmap: bm(0, 5, 6, 7),
 				logs:         "[<>, <001#001:007{set(x, 7)}-0→0>]",
 			},
 		},
@@ -133,11 +134,11 @@ func TestTRaft_Vote(t *testing.T) {
 		// candidate has no upto date logs
 		{
 			candStat{candidateId: lid(2, 2), committer: lid(0, id), logs: []int64{5, 6}},
-			voterStat{votedFor: lid(0, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
+			voterStat{votedFor: lid(1, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
 			wantVoteReply{
-				votedFor:     lid(0, id),
+				votedFor:     lid(1, id),
 				committer:    lid(1, id),
-				allLogBitmap: NewTailBitmap(0, 5, 6),
+				allLogBitmap: bm(0, 5, 6),
 				logs:         "[]",
 			},
 		},
@@ -147,11 +148,11 @@ func TestTRaft_Vote(t *testing.T) {
 		// full log history.
 		{
 			candStat{candidateId: lid(2, 2), committer: lid(1, id), logs: []int64{5}},
-			voterStat{votedFor: lid(0, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
+			voterStat{votedFor: lid(1, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
 			wantVoteReply{
-				votedFor:     lid(0, id),
+				votedFor:     lid(1, id),
 				committer:    lid(1, id),
-				allLogBitmap: NewTailBitmap(0, 5, 6),
+				allLogBitmap: bm(0, 5, 6),
 				logs:         "[]",
 			},
 		},
@@ -164,7 +165,7 @@ func TestTRaft_Vote(t *testing.T) {
 			wantVoteReply{
 				votedFor:     lid(3, id),
 				committer:    lid(1, id),
-				allLogBitmap: NewTailBitmap(0, 5, 6),
+				allLogBitmap: bm(0, 5, 6),
 				logs:         "[]",
 			},
 		},
@@ -177,13 +178,14 @@ func TestTRaft_Vote(t *testing.T) {
 			wantVoteReply{
 				votedFor:     lid(3, id),
 				committer:    lid(1, id),
-				allLogBitmap: NewTailBitmap(0, 5, 6),
+				allLogBitmap: bm(0, 5, 6),
 				logs:         "[]",
 			},
 		},
 	}
 
 	for i, c := range cases {
+		fmt.Println("case-", i)
 		reply := testVote(c.cand, c.voter)
 
 		fmt.Println(reply.String())
@@ -257,7 +259,7 @@ func TestTRaft_VoteOnce(t *testing.T) {
 	})
 	t.Run("reject-by-one/stalelog", func(t *testing.T) {
 		ta := require.New(t)
-		t2.initTraft(lid(2, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
+		t2.initTraft(lid(2, 0), lid(0, 0), []int64{}, nil, nil, lid(2, id2))
 		t3.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
 
 		voted, err, higher := VoteOnce(
@@ -287,8 +289,8 @@ func TestTRaft_VoteOnce(t *testing.T) {
 	})
 	t.Run("reject-by-two/stalelog", func(t *testing.T) {
 		ta := require.New(t)
-		t2.initTraft(lid(2, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
-		t3.initTraft(lid(0, 0), lid(0, 0), []int64{0}, nil, nil, lid(0, id3))
+		t2.initTraft(lid(2, 0), lid(0, 0), []int64{}, nil, nil, lid(2, id2))
+		t3.initTraft(lid(0, 0), lid(0, 0), []int64{0}, nil, nil, lid(2, id3))
 
 		voted, err, higher := VoteOnce(
 			lid(1, id1),
@@ -298,11 +300,11 @@ func TestTRaft_VoteOnce(t *testing.T) {
 
 		ta.Nil(voted)
 		ta.Equal(ErrStaleLog, errors.Cause(err))
-		ta.Equal(int64(-1), higher)
+		ta.Equal(int64(2), higher)
 	})
 	t.Run("reject-by-two/stalelog-higherTerm", func(t *testing.T) {
 		ta := require.New(t)
-		t2.initTraft(lid(2, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
+		t2.initTraft(lid(2, 0), lid(0, 0), []int64{}, nil, nil, lid(2, id2))
 		t3.initTraft(lid(0, 0), lid(0, 0), []int64{0}, nil, nil, lid(5, id3))
 
 		voted, err, higher := VoteOnce(
@@ -344,7 +346,7 @@ func TestTRaft_query(t *testing.T) {
 	defer stopAll(ts)
 
 	t1 := ts[0]
-	t1.initTraft(lid(1, 2), lid(3, 4), []int64{5}, nil, nil, lid(0, id1))
+	t1.initTraft(lid(1, 2), lid(3, 4), []int64{5}, nil, nil, lid(2, id1))
 
 	got := query(t1.actionCh, "logStat", nil).v.(*LogStatus)
 	ta.Equal("001#002", got.Committer.ShortStr())
@@ -485,9 +487,9 @@ func TestTRaft_VoteLoop(t *testing.T) {
 	withCluster(t, "id2MaxCommitter",
 		[]int64{0, 1, 2},
 		func(t *testing.T, ts []*TRaft) {
-			ts[0].initTraft(lid(2, 1), lid(0, 1), []int64{2}, nil, nil, lid(0, 0))
-			ts[1].initTraft(lid(3, 2), lid(0, 1), []int64{2}, nil, nil, lid(0, 1))
-			ts[2].initTraft(lid(1, 3), lid(0, 1), []int64{2}, nil, nil, lid(0, 2))
+			ts[0].initTraft(lid(2, 1), lid(0, 1), []int64{2}, nil, nil, lid(4, 0))
+			ts[1].initTraft(lid(3, 2), lid(0, 1), []int64{2}, nil, nil, lid(4, 1))
+			ts[2].initTraft(lid(1, 3), lid(0, 1), []int64{2}, nil, nil, lid(4, 2))
 
 			go ts[0].VoteLoop()
 			go ts[1].VoteLoop()
@@ -496,7 +498,7 @@ func TestTRaft_VoteLoop(t *testing.T) {
 			// only one succ to elect.
 			// In 1 second, there wont be another winning election.
 			waitForMsg(ts, map[string]int{
-				"vote-win VotedFor:<Term:1 Id:1 >": 1,
+				"vote-win VotedFor:<Term:5 Id:1 >": 1,
 				"vote-fail":                        2,
 			})
 		})
@@ -508,21 +510,21 @@ func TestTRaft_VoteLoop(t *testing.T) {
 			ta := require.New(t)
 			_ = ta
 
-			ts[0].initTraft(lid(2, 0), lid(1, 1), []int64{0, 2}, nil, nil, lid(0, 0))
-			ts[1].initTraft(lid(3, 1), lid(1, 1), []int64{0, 4}, nil, nil, lid(0, 1))
-			ts[2].initTraft(lid(1, 2), lid(2, 1), []int64{0, 3}, nil, []int64{0}, lid(0, 2))
+			ts[0].initTraft(lid(2, 0), lid(1, 1), []int64{0, 2}, nil, nil, lid(4, 0))
+			ts[1].initTraft(lid(3, 1), lid(1, 1), []int64{0, 4}, nil, nil, lid(4, 1))
+			ts[2].initTraft(lid(1, 2), lid(2, 1), []int64{0, 3}, nil, []int64{0}, lid(4, 2))
 			// ts[3].initTraft(lid(1, 2), lid(1, 1), []int64{0, 2, 3}, nil, nil, lid(0, 3))
 			// ts[4].initTraft(lid(1, 2), lid(1, 1), []int64{0, 2, 3}, nil, nil, lid(0, 4))
 
 			ts[3].Stop()
 			ts[4].Stop()
-			ts[1].Status[1].VotedFor = NewLeaderId(3, 1)
+			ts[1].Status[1].VotedFor = lid(3, 1)
 			go ts[1].VoteLoop()
 
 			// only one succ to elect.
 			// In 1 second, there wont be another winning election.
 			waitForMsg(ts, map[string]int{
-				"vote-win VotedFor:<Term:4 Id:1 >": 1,
+				"vote-win VotedFor:<Term:5 Id:1 >": 1,
 			})
 
 			ta.Equal(
@@ -534,16 +536,16 @@ func TestTRaft_VoteLoop(t *testing.T) {
 				RecordsShortStr(ts[1].Logs, ""),
 			)
 
-			ta.Equal(NewLeaderId(4, 1), ts[1].Status[1].Committer)
+			ta.Equal(lid(5, 1), ts[1].Status[1].Committer)
 			ta.Equal(bm(0, 0, 2, 3, 4), ts[1].Status[1].Accepted)
 			ta.Equal(bm(0), ts[1].Status[1].Committed)
 
-			ta.Equal(NewLeaderId(2, 0), ts[1].Status[0].Committer)
+			ta.Equal(lid(2, 0), ts[1].Status[0].Committer)
 			// using Equal to avoid comparison between nil and []int64{}
 			ta.True(bm(0).Equal(ts[1].Status[0].Accepted))
 			ta.True(bm(0).Equal(ts[1].Status[0].Committed))
 
-			ta.Equal(NewLeaderId(1, 2), ts[1].Status[2].Committer)
+			ta.Equal(lid(1, 2), ts[1].Status[2].Committer)
 			// reduced Accepted to Committed
 			ta.Equal(bm(0, 0), ts[1].Status[2].Accepted)
 			ta.Equal(bm(0, 0), ts[1].Status[2].Committed)
@@ -553,6 +555,7 @@ func TestTRaft_VoteLoop(t *testing.T) {
 func TestTRaft_Propose(t *testing.T) {
 
 	lid := NewLeaderId
+	bm := NewTailBitmap
 
 	sendPropose := func(addr string, xcmd interface{}) *ProposeReply {
 		cmd := toCmd(xcmd)
@@ -567,105 +570,96 @@ func TestTRaft_Propose(t *testing.T) {
 		return reply
 	}
 
-	t.Run("invalidLeader", func(t *testing.T) {
-		ta := require.New(t)
-		_ = ta
+	withCluster(t, "invalidLeader",
+		[]int64{0, 1, 2},
+		func(t *testing.T, ts []*TRaft) {
+			ta := require.New(t)
 
-		ids := []int64{0, 1, 2}
-		ts := serveCluster(ids)
-		defer stopAll(ts)
+			ts[0].initTraft(lid(2, 0), lid(1, 1), []int64{}, nil, nil, lid(2, 0))
+			ts[1].initTraft(lid(3, 1), lid(1, 1), []int64{}, nil, nil, lid(3, 1))
+			ts[2].initTraft(lid(1, 2), lid(2, 1), []int64{}, nil, []int64{0}, lid(1, 2))
 
-		ts[0].initTraft(lid(2, 0), lid(1, 1), []int64{}, nil, nil, lid(0, 0))
-		ts[1].initTraft(lid(3, 1), lid(1, 1), []int64{}, nil, nil, lid(0, 1))
-		ts[2].initTraft(lid(1, 2), lid(2, 1), []int64{}, nil, []int64{0}, lid(0, 2))
+			mems := ts[1].Config.Members
 
-		ts[1].Status[1].VotedFor = NewLeaderId(3, 1)
+			// no leader elected, not allow to propose
+			reply := sendPropose(mems[1].Addr, NewCmdI64("foo", "x", 1))
+			ta.Equal(&ProposeReply{
+				OK:          false,
+				Err:         "vote expired",
+				OtherLeader: nil,
+			}, reply)
 
-		mems := ts[1].Config.Members
+			// elect ts[1]
+			go ts[1].VoteLoop()
 
-		// no leader elected, not allow to propose
-		reply := sendPropose(mems[1].Addr, NewCmdI64("foo", "x", 1))
-		ta.Equal(&ProposeReply{
-			OK:          false,
-			Err:         "vote expired",
-			OtherLeader: nil,
-		}, reply)
+			waitForMsg(ts, map[string]int{
+				"vote-win VotedFor:<Term:4 Id:1 >": 1,
+			})
 
-		// elect ts[1]
-		go ts[1].VoteLoop()
-
-		waitForMsg(ts, map[string]int{
-			"vote-win VotedFor:<Term:4 Id:1 >": 1,
+			// send to non-leader replica:
+			reply = sendPropose(mems[0].Addr, NewCmdI64("foo", "x", 1))
+			ta.Equal(&ProposeReply{
+				OK:          false,
+				Err:         "I am not leader",
+				OtherLeader: lid(4, 1)}, reply)
 		})
 
-		// send to non-leader replica:
-		reply = sendPropose(mems[0].Addr, NewCmdI64("foo", "x", 1))
-		ta.Equal(&ProposeReply{
-			OK:          false,
-			Err:         "I am not leader",
-			OtherLeader: NewLeaderId(4, 1)}, reply)
-	})
+	withCluster(t, "succ",
+		[]int64{0, 1, 2},
+		func(t *testing.T, ts []*TRaft) {
 
-	t.Run("succ", func(t *testing.T) {
+			ta := require.New(t)
 
-		ta := require.New(t)
+			ts[0].initTraft(lid(2, 0), lid(1, 1), []int64{}, nil, nil, lid(3, 0))
+			ts[1].initTraft(lid(3, 1), lid(1, 1), []int64{}, nil, nil, lid(3, 1))
+			ts[2].initTraft(lid(1, 2), lid(2, 1), []int64{}, nil, []int64{0}, lid(3, 2))
 
-		ids := []int64{0, 1, 2}
-		ts := serveCluster(ids)
-		defer stopAll(ts)
+			mems := ts[1].Config.Members
 
-		ts[0].initTraft(lid(2, 0), lid(1, 1), []int64{}, nil, nil, lid(0, 0))
-		ts[1].initTraft(lid(3, 1), lid(1, 1), []int64{}, nil, nil, lid(0, 1))
-		ts[2].initTraft(lid(1, 2), lid(2, 1), []int64{}, nil, []int64{0}, lid(0, 2))
+			// elect ts[1]
+			go ts[1].VoteLoop()
 
-		ts[1].Status[1].VotedFor = NewLeaderId(3, 1)
+			waitForMsg(ts, map[string]int{
+				"vote-win VotedFor:<Term:4 Id:1 >": 1,
+			})
 
-		mems := ts[1].Config.Members
+			// TODO check state of other replicas
 
-		// elect ts[1]
-		go ts[1].VoteLoop()
+			// succ to propsoe
+			reply := sendPropose(mems[1].Addr, "y=1")
+			ta.Equal(&ProposeReply{OK: true}, reply)
 
-		waitForMsg(ts, map[string]int{
-			"vote-win VotedFor:<Term:4 Id:1 >": 1,
+			ta.Equal(bm(1), ts[1].Status[1].Accepted)
+			ta.Equal(bm(1), ts[1].Status[1].Committed)
+			ta.Equal(
+				join("[<004#001:000{set(y, 1)}-0:1→0>", "]"),
+				RecordsShortStr(ts[1].Logs, ""),
+			)
+
+			reply = sendPropose(mems[1].Addr, "y=2")
+			ta.Equal(&ProposeReply{OK: true, OtherLeader: nil}, reply)
+
+			ta.Equal(bm(2), ts[1].Status[1].Accepted)
+			ta.Equal(bm(2), ts[1].Status[1].Committed)
+			ta.Equal(
+				join("[<004#001:000{set(y, 1)}-0:1→0>",
+					"<004#001:001{set(y, 2)}-0:3→0>",
+					"]"),
+				RecordsShortStr(ts[1].Logs, ""),
+			)
+
+			reply = sendPropose(mems[1].Addr, "x=3")
+			ta.Equal(&ProposeReply{OK: true, OtherLeader: nil}, reply)
+
+			ta.Equal(bm(3), ts[1].Status[1].Accepted)
+			ta.Equal(
+				join("[<004#001:000{set(y, 1)}-0:1→0>",
+					"<004#001:001{set(y, 2)}-0:3→0>",
+					"<004#001:002{set(x, 3)}-0:4→0>",
+					"]"),
+				RecordsShortStr(ts[1].Logs, ""),
+			)
 		})
-
-		// TODO check state of other replicas
-
-		// succ to propsoe
-		reply := sendPropose(mems[1].Addr, "y=1")
-		ta.Equal(&ProposeReply{OK: true}, reply)
-
-		ta.Equal(NewTailBitmap(1), ts[1].Status[1].Accepted)
-		ta.Equal(NewTailBitmap(1), ts[1].Status[1].Committed)
-		ta.Equal(
-			join("[<004#001:000{set(y, 1)}-0:1→0>", "]"),
-			RecordsShortStr(ts[1].Logs, ""),
-		)
-
-		reply = sendPropose(mems[1].Addr, "y=2")
-		ta.Equal(&ProposeReply{OK: true, OtherLeader: nil}, reply)
-
-		ta.Equal(NewTailBitmap(2), ts[1].Status[1].Accepted)
-		ta.Equal(NewTailBitmap(2), ts[1].Status[1].Committed)
-		ta.Equal(
-			join("[<004#001:000{set(y, 1)}-0:1→0>",
-				"<004#001:001{set(y, 2)}-0:3→0>",
-				"]"),
-			RecordsShortStr(ts[1].Logs, ""),
-		)
-
-		reply = sendPropose(mems[1].Addr, "x=3")
-		ta.Equal(&ProposeReply{OK: true, OtherLeader: nil}, reply)
-
-		ta.Equal(NewTailBitmap(3), ts[1].Status[1].Accepted)
-		ta.Equal(
-			join("[<004#001:000{set(y, 1)}-0:1→0>",
-				"<004#001:001{set(y, 2)}-0:3→0>",
-				"<004#001:002{set(x, 3)}-0:4→0>",
-				"]"),
-			RecordsShortStr(ts[1].Logs, ""),
-		)
-	})
 }
 
 func TestTRaft_LogForward(t *testing.T) {
@@ -683,9 +677,9 @@ func TestTRaft_LogForward(t *testing.T) {
 
 	// init cluster
 	// give ts[1] a highest term thus to be a leader
-	ts[0].initTraft(lid(2, 0), lid(0, 1), []int64{}, nil, nil, lid(1, 0))
-	ts[1].initTraft(lid(3, 1), lid(0, 1), []int64{}, nil, nil, lid(3, 1))
-	ts[2].initTraft(lid(1, 2), lid(0, 1), []int64{}, nil, []int64{0}, lid(0, 2))
+	ts[0].initTraft(lid(2, 0), lid(0, 1), []int64{}, nil, nil, lid(3, 0))
+	ts[1].initTraft(lid(3, 1), lid(0, 1), []int64{}, nil, nil, lid(5, 1))
+	ts[2].initTraft(lid(1, 2), lid(0, 1), []int64{}, nil, []int64{0}, lid(2, 2))
 
 	ts[0].addlogs()
 	ts[1].addlogs("x=0", "y=1", "x=2")
@@ -707,12 +701,14 @@ func TestTRaft_LogForward(t *testing.T) {
 
 	sec1k := int64(time.Second * 1000)
 	cases := []struct {
-		name          string
-		to            int64
-		votedFor      *LeaderId
-		expire        int64
-		committer     *LeaderId
-		logs          []*Record
+		name     string
+		to       int64
+		votedFor *LeaderId
+		expire   int64
+
+		committer *LeaderId
+		logs      []*Record
+
 		wantOK        bool
 		wantVotedFor  *LeaderId
 		wantAccepted  *TailBitmap
@@ -720,12 +716,12 @@ func TestTRaft_LogForward(t *testing.T) {
 		wantLogs      []string
 	}{
 		{"unmatchedCommitter",
-			0, lid(1, 0), sec1k, lid(1, 2), logs[0:],
-			false, lid(1, 0), nil, nil, nil,
+			0, lid(3, 0), sec1k, lid(1, 2), logs[0:],
+			false, lid(3, 0), nil, nil, nil,
 		},
 		{"VotedForExpired",
-			0, lid(1, 2), -sec1k, lid(1, 2), logs[0:],
-			false, lid(1, 2), nil, nil, nil,
+			0, lid(2, 2), -sec1k, lid(1, 2), logs[0:],
+			false, lid(2, 2), nil, nil, nil,
 		},
 		{"accept/log2",
 			0, lid(3, 1), sec1k, lid(3, 1), logs[2:],
@@ -733,7 +729,7 @@ func TestTRaft_LogForward(t *testing.T) {
 			[]string{
 				"<>",
 				"<>",
-				"<003#001:002{set(x, 2)}-0:5→0>",
+				"<005#001:002{set(x, 2)}-0:5→0>",
 			},
 		},
 		{"accept/log12",
@@ -741,8 +737,8 @@ func TestTRaft_LogForward(t *testing.T) {
 			true, lid(3, 1), bm(3), bm(0),
 			[]string{
 				"<>",
-				"<003#001:001{set(y, 1)}-0:2→0>",
-				"<003#001:002{set(x, 2)}-0:5→0>",
+				"<005#001:001{set(y, 1)}-0:2→0>",
+				"<005#001:002{set(x, 2)}-0:5→0>",
 			},
 		},
 		{"accept/log12/overrideOld",
@@ -750,8 +746,8 @@ func TestTRaft_LogForward(t *testing.T) {
 			true, lid(3, 1), bm(3), bm(1),
 			[]string{
 				"<>",
-				"<003#001:001{set(y, 1)}-0:2→0>",
-				"<003#001:002{set(x, 2)}-0:5→0>",
+				"<005#001:001{set(y, 1)}-0:2→0>",
+				"<005#001:002{set(x, 2)}-0:5→0>",
 			},
 		},
 	}
@@ -763,6 +759,9 @@ func TestTRaft_LogForward(t *testing.T) {
 				dst := ts[c.to].Status[c.to]
 				dst.VotedFor = c.votedFor
 				dst.VoteExpireAt = uSecondI64() + c.expire
+
+				fmt.Println(ts[c.to].Node)
+				ts[c.to].checkStatus()
 
 				addr := ts[1].Config.Members[c.to].Addr
 				repl := sendLogForward(addr, &LogForwardReq{

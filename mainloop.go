@@ -1,5 +1,7 @@
 package traft
 
+import fmt "fmt"
+
 type queryRst struct {
 	v   interface{}
 	ok  bool
@@ -38,6 +40,9 @@ func (tr *TRaft) Loop() {
 		case <-shutdown:
 			return
 		case a := <-act:
+
+			tr.checkStatus()
+
 			switch a.operation {
 			case "logStat":
 				a.rstCh <- &queryRst{
@@ -139,6 +144,25 @@ func (tr *TRaft) Loop() {
 			default:
 				panic("unknown action" + a.operation)
 			}
+
+			tr.checkStatus()
 		}
 	}
+}
+
+// check if TRaft status violate consistency requirement.
+func (tr *TRaft) checkStatus() {
+	id := tr.Id
+	me := tr.Status[id]
+
+	// committer can never greater than voted leader
+	if me.Committer.Cmp(me.VotedFor) > 0 {
+		panic(
+			fmt.Sprintf("Commiter > VotedFor: Id:%d %s %s",
+				id,
+				me.Committer.ShortStr(),
+				me.VotedFor.ShortStr(),
+			))
+	}
+
 }

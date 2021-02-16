@@ -41,6 +41,8 @@ func (tr *TRaft) initTraft(
 	}
 
 	tr.Status[id].VotedFor = votedFor.Clone()
+
+	tr.checkStatus()
 }
 
 func buildPseudoLogs(
