@@ -207,131 +207,131 @@ func TestTRaft_Vote(t *testing.T) {
 
 func TestTRaft_VoteOnce(t *testing.T) {
 
-	ta := require.New(t)
-	_ = ta
-
-	ids := []int64{1, 2, 3}
-	id1 := int64(1)
-	id2 := int64(2)
-	id3 := int64(3)
-
-	_ = id1
+	// cluster = {0, 1, 2}
+	// ts[0] vote once with differnt Committer/VotedFor settings.
 
 	lid := NewLeaderId
 
-	ts := serveCluster(ids)
-	defer stopAll(ts)
+	type wt struct {
+		hasVoteReplies bool
+		err            error
+		higherTerm     int64
+	}
 
-	t1 := ts[0]
-	t2 := ts[1]
-	t3 := ts[2]
+	cases := []struct {
+		name       string
+		committers []*LeaderId
+		votedFors  []*LeaderId
+		logs       [][]string
+		candidate  *LeaderId
+		want       wt
+	}{
+		{name: "2emptyVoter/term-0",
+			candidate: lid(0, 0),
+			want: wt{
+				hasVoteReplies: false,
+				err:            ErrStaleTermId,
+				higherTerm:     0,
+			},
+		},
+		{name: "2emptyVoter/term-1",
+			candidate: lid(1, 0),
+			want: wt{
+				hasVoteReplies: true,
+				err:            nil,
+				higherTerm:     -1,
+			},
+		},
+		{name: "reject-by-one/stalelog",
+			committers: []*LeaderId{nil, lid(2, 0)},
+			votedFors:  []*LeaderId{nil, lid(2, 1)},
+			candidate:  lid(1, 0),
+			want: wt{
+				hasVoteReplies: true,
+				err:            nil,
+				higherTerm:     -1,
+			},
+		},
+		{name: "reject-by-one/higherTerm",
+			committers: []*LeaderId{nil, nil, lid(0, 0)},
+			votedFors:  []*LeaderId{nil, nil, lid(5, 2)},
+			candidate:  lid(1, 0),
+			want: wt{
+				hasVoteReplies: true,
+				err:            nil,
+				higherTerm:     -1,
+			},
+		},
+		{name: "reject-by-two/stalelog",
+			committers: []*LeaderId{nil, lid(2, 0), lid(0, 0)},
+			votedFors:  []*LeaderId{nil, lid(2, 1), lid(2, 2)},
+			candidate:  lid(1, 0),
+			want: wt{
+				hasVoteReplies: false,
+				err:            ErrStaleLog,
+				higherTerm:     2,
+			},
+		},
+		{name: "reject-by-two/stalelog-higherTerm",
+			committers: []*LeaderId{nil, lid(2, 0), lid(0, 0)},
+			votedFors:  []*LeaderId{nil, lid(2, 1), lid(5, 2)},
+			logs:       [][]string{nil, nil, []string{"x=0"}},
+			candidate:  lid(1, 0),
+			want: wt{
+				hasVoteReplies: false,
+				err:            ErrStaleLog,
+				higherTerm:     5,
+			},
+		},
+		{name: "reject-by-two/higherTerm",
+			votedFors: []*LeaderId{nil, lid(3, 1), lid(5, 2)},
+			candidate: lid(1, 0),
+			want: wt{
+				hasVoteReplies: false,
+				err:            ErrStaleTermId,
+				higherTerm:     5,
+			},
+		},
+	}
 
-	t.Run("2emptyVoter/term-0", func(t *testing.T) {
-		ta := require.New(t)
-		t2.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
-		t3.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
+	for _, c := range cases {
+		withCluster(t, c.name,
+			[]int64{0, 1, 2},
+			func(t *testing.T, ts []*TRaft) {
+				ta := require.New(t)
+				for i, cmt := range c.committers {
+					if cmt != nil {
+						ts[i].Status[int64(i)].Committer = cmt
+					}
+				}
 
-		voted, err, higher := VoteOnce(
-			lid(0, id1),
-			ExportLogStatus(t1.Status[id1]),
-			t1.Config.Clone(),
-		)
+				for i, v := range c.votedFors {
+					if v != nil {
+						ts[i].Status[int64(i)].VotedFor = v
+					}
+				}
 
-		ta.Nil(voted)
-		ta.Equal(ErrStaleTermId, errors.Cause(err))
-		ta.Equal(int64(0), higher)
-	})
+				for i, ls := range c.logs {
+					for _, l := range ls {
+						ts[i].addlogs(l)
+					}
+				}
 
-	t.Run("2emptyVoter/term-1", func(t *testing.T) {
-		ta := require.New(t)
-		t2.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
-		t3.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
+				voted, err, higher := VoteOnce(
+					c.candidate,
+					ExportLogStatus(ts[0].Status[0]),
+					ts[0].Config.Clone(),
+				)
 
-		voted, err, higher := VoteOnce(
-			lid(1, id1),
-			ExportLogStatus(t1.Status[id1]),
-			t1.Config.Clone(),
-		)
-
-		ta.NotNil(voted)
-		ta.Nil(err)
-		ta.Equal(int64(-1), higher)
-	})
-	t.Run("reject-by-one/stalelog", func(t *testing.T) {
-		ta := require.New(t)
-		t2.initTraft(lid(2, 0), lid(0, 0), []int64{}, nil, nil, lid(2, id2))
-		t3.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id3))
-
-		voted, err, higher := VoteOnce(
-			lid(1, id1),
-			ExportLogStatus(t1.Status[id1]),
-			t1.Config.Clone(),
-		)
-
-		ta.NotNil(voted)
-		ta.Nil(err)
-		ta.Equal(int64(-1), higher)
-	})
-	t.Run("reject-by-one/higherTerm", func(t *testing.T) {
-		ta := require.New(t)
-		t2.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id2))
-		t3.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(5, id3))
-
-		voted, err, higher := VoteOnce(
-			lid(1, id1),
-			ExportLogStatus(t1.Status[id1]),
-			t1.Config.Clone(),
-		)
-
-		ta.NotNil(voted)
-		ta.Nil(err)
-		ta.Equal(int64(-1), higher)
-	})
-	t.Run("reject-by-two/stalelog", func(t *testing.T) {
-		ta := require.New(t)
-		t2.initTraft(lid(2, 0), lid(0, 0), []int64{}, nil, nil, lid(2, id2))
-		t3.initTraft(lid(0, 0), lid(0, 0), []int64{0}, nil, nil, lid(2, id3))
-
-		voted, err, higher := VoteOnce(
-			lid(1, id1),
-			ExportLogStatus(t1.Status[id1]),
-			t1.Config.Clone(),
-		)
-
-		ta.Nil(voted)
-		ta.Equal(ErrStaleLog, errors.Cause(err))
-		ta.Equal(int64(2), higher)
-	})
-	t.Run("reject-by-two/stalelog-higherTerm", func(t *testing.T) {
-		ta := require.New(t)
-		t2.initTraft(lid(2, 0), lid(0, 0), []int64{}, nil, nil, lid(2, id2))
-		t3.initTraft(lid(0, 0), lid(0, 0), []int64{0}, nil, nil, lid(5, id3))
-
-		voted, err, higher := VoteOnce(
-			lid(1, id1),
-			ExportLogStatus(t1.Status[id1]),
-			t1.Config.Clone(),
-		)
-
-		ta.Nil(voted)
-		ta.Equal(ErrStaleLog, errors.Cause(err))
-		ta.Equal(int64(5), higher)
-	})
-	t.Run("reject-by-two/higherTerm", func(t *testing.T) {
-		ta := require.New(t)
-		t2.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(3, id2))
-		t3.initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(5, id3))
-
-		voted, err, higher := VoteOnce(
-			lid(1, id1),
-			ExportLogStatus(t1.Status[id1]),
-			t1.Config.Clone(),
-		)
-
-		ta.Nil(voted)
-		ta.Equal(ErrStaleTermId, errors.Cause(err))
-		ta.Equal(int64(5), higher)
-	})
+				if c.want.hasVoteReplies {
+					ta.NotNil(voted)
+				} else {
+					ta.Nil(voted)
+				}
+				ta.Equal(c.want.err, errors.Cause(err))
+				ta.Equal(c.want.higherTerm, higher)
+			})
+	}
 }
 
 func TestTRaft_query(t *testing.T) {
