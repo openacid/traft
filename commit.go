@@ -2,12 +2,6 @@ package traft
 
 import "github.com/pkg/errors"
 
-// the request sending to Loop() to commit a continuous range of logs
-type commitReq struct {
-	committer *LeaderId
-	lsns      []int64
-}
-
 func (tr *TRaft) leaderUpdateCommitted(
 	committer *LeaderId, lsns []int64) error {
 

@@ -158,8 +158,6 @@ func (tr *TRaft) internalMergeLogs(votes []*VoteReply) {
 // run forever to elect itself as leader if there is no leader in this cluster.
 func (tr *TRaft) VoteLoop() {
 
-	act := tr.actionCh
-
 	id := tr.Id
 
 	// return true if shutting down
@@ -170,7 +168,9 @@ func (tr *TRaft) VoteLoop() {
 	followerSleep := time.Millisecond * 200
 
 	for tr.running {
-		leadst := query(act, "leaderStat", nil).v.(*LeaderStatus)
+		leadst := tr.query("funcv", func() interface{} {
+			return ExportLeaderStatus(tr.Status[tr.Id])
+		}).v.(*LeaderStatus)
 
 		now := uSecondI64()
 
@@ -200,8 +200,13 @@ func (tr *TRaft) VoteLoop() {
 			"VotedFor", leadst.VotedFor,
 			"leadst.VoteExpireAt-now", leadst.VoteExpireAt-now)
 
-		logst := query(act, "logStat", nil).v.(*LogStatus)
-		config := query(act, "config", nil).v.(*ClusterConfig)
+		logst := tr.query("funcv", func() interface{} {
+			return ExportLogStatus(tr.Status[tr.Id])
+		}).v.(*LogStatus)
+
+		config := tr.query("funcv", func() interface{} {
+			return tr.Config.Clone()
+		}).v.(*ClusterConfig)
 
 		// vote myself
 		leadst.VotedFor.Term++
@@ -209,10 +214,23 @@ func (tr *TRaft) VoteLoop() {
 
 		{
 			// update local vote first
-			ok := query(act, "set_voted", leadst).ok
-			if !ok {
+			err := tr.query("func", func() error {
+				me := tr.Status[tr.Id]
+				if leadst.VotedFor.Cmp(me.VotedFor) >= 0 {
+					me.VotedFor = leadst.VotedFor.Clone()
+					me.VoteExpireAt = leadst.VoteExpireAt
+					return nil
+				} else {
+					return errors.Wrapf(ErrLeaderLost, "when set local VotedFor for election")
+				}
+
+			}).err
+			if err != nil {
 				// voted for other replica
-				leadst = query(act, "leaderStat", nil).v.(*LeaderStatus)
+				leadst = tr.query("funcv", func() interface{} {
+					return ExportLeaderStatus(tr.Status[tr.Id])
+				}).v.(*LeaderStatus)
+
 				lg.Infow("reload-leader",
 					"Id", id,
 					"leadst.VotedFor", leadst.VotedFor,
@@ -239,12 +257,40 @@ func (tr *TRaft) VoteLoop() {
 
 			lg.Infow("to-update-leader", "leadst", leadst.VoteExpireAt)
 
-			ok := query(act, "update_leaderAndLog", &leaderAndVotes{
-				leadst,
-				voted,
-			}).ok
+			err := tr.query("func", func() error {
+				votes := voted
 
-			if ok {
+				me := tr.Status[tr.Id]
+
+				if leadst.VotedFor.Cmp(me.VotedFor) == 0 {
+					me.VotedFor = leadst.VotedFor.Clone()
+					me.VoteExpireAt = leadst.VoteExpireAt
+
+					tr.internalMergeLogs(votes)
+					// TODO update Committer to this replica
+					// then going on replicating these logs to others.
+					//
+					// TODO update local view of status of other replicas.
+					for _, v := range votes {
+						if v.Committer.Equal(me.Committer) {
+							tr.Status[v.Id].Accepted = v.Accepted.Clone()
+						} else {
+							// if committers are different, the leader can no be
+							// sure whether a follower has identical logs
+							tr.Status[v.Id].Accepted = v.Committed.Clone()
+						}
+						tr.Status[v.Id].Committed = v.Committed.Clone()
+
+						tr.Status[v.Id].Committer = v.Committer.Clone()
+					}
+					me.Committer = leadst.VotedFor.Clone()
+					return nil
+				} else {
+					return errors.Wrapf(ErrLeaderLost, "when updating leadership and follower state")
+				}
+			}).err
+
+			if err == nil {
 				tr.sendMsg("vote-win", leadst)
 				slp(heartBeatSleep)
 			} else {
