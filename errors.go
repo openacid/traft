@@ -7,4 +7,5 @@ var (
 	ErrStaleTermId = errors.New("local Term-Id is stale")
 	ErrTimeout     = errors.New("timeout")
 	ErrLeaderLost  = errors.New("leadership lost")
+	ErrNeedElect   = errors.New("no leader found, need to elect")
 )

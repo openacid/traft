@@ -85,6 +85,37 @@ func (tr *TRaft) addlogs(cmds ...interface{}) {
 	}
 }
 
+// establishLeadership updates leader state when a election approved by a quorum.
+func (tr *TRaft) establishLeadership(currVote *LeaderId, votes []*VoteReply) {
+
+	me := tr.Status[tr.Id]
+
+	// not to update expire time.
+	// let the leader expire earlier than follower to reduce chance that follower reject replication from leader.
+
+	tr.mergeFollowerLogs(votes)
+
+	// then going on replicating these logs to others.
+	//
+	// TODO update local view of status of other replicas.
+	for _, v := range votes {
+		if v.Committer.Equal(me.Committer) {
+			tr.Status[v.Id].Accepted = v.Accepted.Clone()
+		} else {
+			// if committers are different, the leader can no be
+			// sure whether a follower has identical logs
+			tr.Status[v.Id].Accepted = v.Committed.Clone()
+		}
+		tr.Status[v.Id].Committed = v.Committed.Clone()
+
+		tr.Status[v.Id].Committer = v.Committer.Clone()
+	}
+
+	// Leader accept all the logs it sees
+	me.Committer = currVote.Clone()
+
+}
+
 // find the max committer log to fill in local log holes.
 func (tr *TRaft) mergeFollowerLogs(votes []*VoteReply) {
 
@@ -100,54 +131,63 @@ func (tr *TRaft) mergeFollowerLogs(votes []*VoteReply) {
 	id := tr.Id
 	me := tr.Status[id]
 
+	maxCommitter, chosen := tr.chooseMaxCommitterReplies(votes)
+	lg.Infow("mergeFollowerLogs", "maxCommitter", maxCommitter)
+
 	l := me.Accepted.Len()
-	for i := me.Accepted.Offset; i < l; i++ {
-		if me.Accepted.Get(i) != 0 {
+	for lsn := me.Accepted.Offset; lsn < l; lsn++ {
+		if me.Accepted.Get(lsn) != 0 {
 			continue
 		}
 
-		maxCommitter := NewLeaderId(0, 0)
-		var maxRec *Record
-		// var isCommitted bool
-		for _, vr := range votes {
-			r := vr.PopRecord(i)
-			fmt.Println("lsn:", i, "r:", r.ShortStr())
+		var rec *Record
+		for _, vr := range chosen {
+			r := vr.PopRecord(lsn)
+			fmt.Println("lsn:", lsn, "r:", r.ShortStr())
 			if r == nil {
 				continue
 			}
 
-			cmpRst := maxCommitter.Cmp(vr.Committer)
-			if cmpRst == 0 {
-				if !maxRec.Equal(r) {
-					panic("wtf: same committer different log")
-				}
+			if rec != nil && rec.Author.Cmp(r.Author) != 0 {
+				panic("wtf")
 			}
 
-			if cmpRst < 0 {
-				maxCommitter = vr.Committer
-				maxRec = r
-			}
-
-			// if !isCommitted && vr.Committed.Get(i) != 0 {
-			//     isCommitted = true
-			// }
+			rec = r
+			// TODO if r is not nil: break
 		}
 
-		if maxRec == nil {
+		// TODO fill in with empty log
+		if rec == nil {
 			continue
 		}
 
-		tr.Logs[i-tr.LogOffset] = maxRec
-		me.Accepted.Set(i)
-		// if isCommitted {
-		//     me.Committed.Set(i)
-		// }
+		tr.Logs[lsn-tr.LogOffset] = rec
+		me.Accepted.Set(lsn)
 
 		lg.Infow("merge-log",
-			"lsn", i,
+			"lsn", lsn,
 			"committer", maxCommitter,
-			"record", maxRec)
+			"record", rec)
 	}
+}
+
+// chooseMaxCommitterReplies chooses the max Committer and the vote-replies with the max Committer.
+// logs with Committer smaller than me are discarded too.
+func (tr *TRaft) chooseMaxCommitterReplies(replies []*VoteReply) (*LeaderId, []*VoteReply) {
+	me := tr.Status[tr.Id]
+	maxCommitter := me.Committer
+	for _, v := range replies {
+		if v.Committer.Cmp(maxCommitter) > 0 {
+			maxCommitter = v.Committer
+		}
+	}
+	chosen := make([]*VoteReply, 0, len(replies))
+	for _, v := range replies {
+		if v.Committer.Cmp(maxCommitter) == 0 {
+			chosen = append(chosen, v)
+		}
+	}
+	return maxCommitter, chosen
 }
 
 // run forever to elect itself as leader if there is no leader in this cluster.
@@ -155,7 +195,6 @@ func (tr *TRaft) VoteLoop() {
 
 	id := tr.Id
 
-	// return true if shutting down
 	slp := tr.sleep
 
 	maxStaleTermSleep := time.Millisecond * 200
@@ -163,157 +202,135 @@ func (tr *TRaft) VoteLoop() {
 	followerSleep := time.Millisecond * 200
 
 	for tr.running {
-		leadst := tr.query( func() interface{} {
-			return ExportLeaderStatus(tr.Status[tr.Id])
-		}).v.(*LeaderStatus)
+		var currVote *LeaderId
+		var expireAt int64
+		var logst *LogStatus
+		var config *ClusterConfig
 
 		now := uSecondI64()
+		lg.Infow("vote loop round start:",
+			"Id", tr.Id,
+		)
 
-		// TODO refine this: wait until VoteExpireAt and watch for missing
-		// heartbeat.
-		if now < leadst.VoteExpireAt {
+		err := tr.query(func() error {
+			me := tr.Status[tr.Id]
 
+			currVote = me.VotedFor.Clone()
+			expireAt = me.VoteExpireAt
+			logst = ExportLogStatus(tr.Status[tr.Id])
+			config = tr.Config.Clone()
+
+			if now < expireAt {
+				return nil
+			}
+
+			// need to vote
+			// vote myself
+
+			me.VotedFor.Term++
+			me.VotedFor.Id = tr.Id
+			currVote = me.VotedFor.Clone()
+
+			// TODO leaderLease?
+			me.VoteExpireAt = uSecondI64() + leaderLease
+
+			return errors.Wrapf(ErrNeedElect, "expireAt-now: %d", expireAt-now)
+
+		}).err
+
+		if err == nil {
+			// TODO refine this: wait until VoteExpireAt and watch for missing
+			// heartbeat.
 			lg.Infow("leader-not-expired",
 				"Id", tr.Id,
-				"VotedFor", leadst.VotedFor,
-				"leadst.VoteExpireAt-now", leadst.VoteExpireAt-now)
+				"VotedFor", currVote,
+				"leadst.VoteExpireAt-now", expireAt-now)
 
-			if leadst.VotedFor.Id == tr.Id {
+			if currVote.Id == tr.Id {
 				// I am a leader
 				// TODO heartbeat other replicas to keep leadership
 				slp(heartBeatSleep)
 			} else {
 				slp(followerSleep)
 			}
-
 			continue
 		}
 
 		// call for a new leader!!!
 		lg.Infow("leader-expired",
 			"Id", tr.Id,
-			"VotedFor", leadst.VotedFor,
-			"leadst.VoteExpireAt-now", leadst.VoteExpireAt-now)
+			"VotedFor", currVote,
+			"leadst.VoteExpireAt-now", expireAt-now)
 
-		logst := tr.query(func() interface{} {
-			return ExportLogStatus(tr.Status[tr.Id])
-		}).v.(*LogStatus)
+		tr.sendMsg("vote-start", currVote.ShortStr(), logst)
 
-		config := tr.query( func() interface{} {
-			return tr.Config.Clone()
-		}).v.(*ClusterConfig)
-
-		// vote myself
-		leadst.VotedFor.Term++
-		leadst.VotedFor.Id = tr.Id
-
-		{
-			// update local vote first
-			err := tr.query( func() error {
-				me := tr.Status[tr.Id]
-				if leadst.VotedFor.Cmp(me.VotedFor) >= 0 {
-					me.VotedFor = leadst.VotedFor.Clone()
-					me.VoteExpireAt = leadst.VoteExpireAt
-					return nil
-				} else {
-					return errors.Wrapf(ErrLeaderLost, "when set local VotedFor for election")
-				}
-
-			}).err
-			if err != nil {
-				// voted for other replica
-				leadst = tr.query( func() interface{} {
-					return ExportLeaderStatus(tr.Status[tr.Id])
-				}).v.(*LeaderStatus)
-
-				lg.Infow("reload-leader",
-					"Id", id,
-					"leadst.VotedFor", leadst.VotedFor,
-					"leadst.VoteExpireAt", leadst.VoteExpireAt,
-				)
-				continue
-			}
-		}
-
-		tr.sendMsg("vote-start", leadst.VotedFor.ShortStr(), logst)
-
-		voted, err, higher := VoteOnce(
-			leadst.VotedFor,
+		voteReplies, err, higher := VoteOnce(
+			currVote,
 			logst,
 			config,
 		)
 
-		lg.Infow("vote-loop:result", "Id", tr.Id, "voted", voted, "err", err, "higher", higher)
+		lg.Infow("vote-loop:result", "Id", tr.Id, "voteReplies", voteReplies, "err", err, "higher", higher)
 
-		if voted != nil {
-			// granted by a quorum
-
-			leadst.VoteExpireAt = uSecondI64() + leaderLease
-
-			lg.Infow("to-update-leader", "leadst", leadst.VoteExpireAt)
-
-			err := tr.query( func() error {
-				votes := voted
+		if voteReplies == nil {
+			// fail to elect me.
+			tr.sendMsg("vote-fail", "err", err)
+			tr.query(func() error {
 
 				me := tr.Status[tr.Id]
 
-				if leadst.VotedFor.Cmp(me.VotedFor) == 0 {
-					me.VotedFor = leadst.VotedFor.Clone()
-					me.VoteExpireAt = leadst.VoteExpireAt
-
-					tr.mergeFollowerLogs(votes)
-					// TODO update Committer to this replica
-					// then going on replicating these logs to others.
-					//
-					// TODO update local view of status of other replicas.
-					for _, v := range votes {
-						if v.Committer.Equal(me.Committer) {
-							tr.Status[v.Id].Accepted = v.Accepted.Clone()
-						} else {
-							// if committers are different, the leader can no be
-							// sure whether a follower has identical logs
-							tr.Status[v.Id].Accepted = v.Committed.Clone()
-						}
-						tr.Status[v.Id].Committed = v.Committed.Clone()
-
-						tr.Status[v.Id].Committer = v.Committer.Clone()
-					}
-					me.Committer = leadst.VotedFor.Clone()
-					return nil
-				} else {
-					return errors.Wrapf(ErrLeaderLost, "when updating leadership and follower state")
+				if currVote.Cmp(me.VotedFor) == 0 {
+					// I did not vote other ones yet,
+					// and I am not leader.
+					// reset it.
+					me.VoteExpireAt = 0
 				}
-			}).err
 
-			if err == nil {
-				tr.sendMsg("vote-win", leadst)
-				slp(heartBeatSleep)
-			} else {
-				tr.sendMsg("vote-fail", "reason:fail-to-update", leadst)
-				lg.Infow("reload-leader",
-					"Id", id,
-					"leadst.VotedFor", leadst.VotedFor,
-					"leadst.VoteExpireAt", leadst.VoteExpireAt,
-				)
+				return nil
+			})
+
+			// wait for some time by err
+			switch errors.Cause(err) {
+			case ErrStaleTermId:
+				slp(time.Millisecond*5 + time.Duration(rand.Int63n(int64(maxStaleTermSleep))))
+				// leadst.VotedFor.Term = higher + 1
+			case ErrTimeout:
+				slp(time.Millisecond * 10)
+			case ErrStaleLog:
+				// I can not be the leader.
+				// sleep a day. waiting for others to elect to be a leader.
+				slp(time.Second * 86400)
 			}
 			continue
 		}
 
-		tr.sendMsg("vote-fail", "err", err)
+		// granted by a quorum
 
-		// not voted
+		lg.Infow("to-update-leader", "votedFor", currVote)
 
-		switch errors.Cause(err) {
-		case ErrStaleTermId:
-			slp(time.Millisecond*5 + time.Duration(rand.Int63n(int64(maxStaleTermSleep))))
-			// leadst.VotedFor.Term = higher + 1
-		case ErrTimeout:
-			slp(time.Millisecond * 10)
-		case ErrStaleLog:
-			// I can not be the leader.
-			// sleep a day. waiting for others to elect to be a leader.
-			slp(time.Second * 86400)
+		updateErr := tr.query(func() error {
+
+			me := tr.Status[tr.Id]
+
+			if currVote.Cmp(me.VotedFor) != 0 {
+				return errors.Wrapf(ErrLeaderLost, "when updating leadership and follower state")
+			}
+
+			tr.establishLeadership(currVote, voteReplies)
+			return nil
+
+		}).err
+
+		if updateErr != nil {
+			tr.sendMsg("vote-fail", "reason:fail-to-update", currVote)
+			lg.Infow("reload-leader",
+				"Id", id,
+				"leadst.VotedFor", currVote,
+			)
 		}
+
+		tr.sendMsg("vote-win", currVote)
+		slp(heartBeatSleep)
 	}
 }
 

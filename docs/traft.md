@@ -13,6 +13,7 @@ var (
 	ErrStaleTermId = errors.New("local Term-Id is stale")
 	ErrTimeout     = errors.New("timeout")
 	ErrLeaderLost  = errors.New("leadership lost")
+	ErrNeedElect   = errors.New("no leader found, need to elect")
 )
 ```
 
@@ -27,7 +28,7 @@ var (
 #### func  CmpLogStatus
 
 ```go
-func CmpLogStatus(a, b logStat) int
+func CmpLogStatus(a, b logStater) int
 ```
 
 #### func  RecordsShortStr
@@ -599,7 +600,7 @@ type LeaderStatus struct {
 #### func  ExportLeaderStatus
 
 ```go
-func ExportLeaderStatus(ls leaderStat) *LeaderStatus
+func ExportLeaderStatus(ls leaderStater) *LeaderStatus
 ```
 
 #### func (*LeaderStatus) Descriptor
@@ -958,7 +959,7 @@ type LogStatus struct {
 #### func  ExportLogStatus
 
 ```go
-func ExportLogStatus(ls logStat) *LogStatus
+func ExportLogStatus(ls logStater) *LogStatus
 ```
 
 #### func (*LogStatus) Descriptor
@@ -1827,7 +1828,9 @@ func (tr *TRaft) LogForward(ctx context.Context, req *LogForwardReq) (*LogForwar
 ```go
 func (tr *TRaft) Loop()
 ```
-Loop handles actions from other components.
+Loop handles actions from other components. This is the only goroutine that is
+allowed to update traft state. Any info to send out of this goroutine must be
+cloned.
 
 #### func (*TRaft) Propose
 
@@ -2186,7 +2189,7 @@ type VoteReply struct {
 ```go
 func VoteOnce(
 	candidate *LeaderId,
-	logStatus logStat,
+	logStatus *LogStatus,
 	config *ClusterConfig,
 ) ([]*VoteReply, error, int64)
 ```

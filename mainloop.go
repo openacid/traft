@@ -12,29 +12,29 @@ type queryRst struct {
 	err error
 }
 
-// For other goroutine to ask mainloop to query
+// query the mainloop goroutine for something, by other goroutines, such as
+// update traft state or get some info.
 func (tr *TRaft) query(arg interface{}) *queryRst {
 	rstCh := make(chan *queryRst)
 	tr.actionCh <- &queryBody{arg, rstCh}
 	rst := <-rstCh
 	lg.Infow("chan-query",
-		"arg", arg,
+		// "arg", arg,
 		"rst.err", rst.err,
 		"rst.v", toStr(rst.v))
 	return rst
 }
 
 // Loop handles actions from other components.
+// This is the only goroutine that is allowed to update traft state.
+// Any info to send out of this goroutine must be cloned.
 func (tr *TRaft) Loop() {
-
-	shutdown := tr.shutdown
-	act := tr.actionCh
 
 	for {
 		select {
-		case <-shutdown:
+		case <-tr.shutdown:
 			return
-		case a := <-act:
+		case a := <-tr.actionCh:
 
 			tr.checkStatus()
 
@@ -54,7 +54,8 @@ func (tr *TRaft) Loop() {
 	}
 }
 
-// check if TRaft status violate consistency requirement.
+// checkStatus checks if TRaft status violate consistency requirement.
+// This is just a routine for debug.
 func (tr *TRaft) checkStatus() {
 	id := tr.Id
 	me := tr.Status[id]

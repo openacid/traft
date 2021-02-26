@@ -348,7 +348,7 @@ func TestTRaft_query(t *testing.T) {
 	t1 := ts[0]
 	t1.initTraft(lid(1, 2), lid(3, 4), []int64{5}, nil, nil, lid(2, id1))
 
-	got := t1.query( func() interface{}{
+	got := t1.query(func() interface{} {
 		return ExportLogStatus(t1.Status[t1.Id])
 	}).v.(*LogStatus)
 	ta.Equal("001#002", got.Committer.ShortStr())
@@ -428,7 +428,7 @@ func TestTRaft_VoteLoop(t *testing.T) {
 			go ts[0].VoteLoop()
 
 			waitForMsg(ts, map[string]int{
-				"vote-win VotedFor:<Term:1 >": 1,
+				"vote-win 001#000": 1,
 			})
 
 			ta.Equal(lid(1, 0), ts[0].Status[0].VotedFor)
@@ -447,7 +447,7 @@ func TestTRaft_VoteLoop(t *testing.T) {
 
 			go ts[1].VoteLoop()
 			waitForMsg(ts, map[string]int{
-				"vote-win VotedFor:<Term:1 Id:1 >": 1,
+				"vote-win 001#001": 1,
 			})
 
 			ta.Equal(lid(1, 1), ts[1].Status[1].VotedFor)
@@ -466,7 +466,7 @@ func TestTRaft_VoteLoop(t *testing.T) {
 			// only one succ to elect.
 			// In 1 second, there wont be another winning election.
 			waitForMsg(ts, map[string]int{
-				"vote-win VotedFor:<Term:1 Id:1 >": 1,
+				"vote-win 001#001": 1,
 			})
 		})
 
@@ -500,8 +500,8 @@ func TestTRaft_VoteLoop(t *testing.T) {
 			// only one succ to elect.
 			// In 1 second, there wont be another winning election.
 			waitForMsg(ts, map[string]int{
-				"vote-win VotedFor:<Term:5 Id:1 >": 1,
-				"vote-fail":                        2,
+				"vote-win 005#001": 1,
+				"vote-fail":        2,
 			})
 		})
 
@@ -512,6 +512,9 @@ func TestTRaft_VoteLoop(t *testing.T) {
 			ta := require.New(t)
 			_ = ta
 
+			// R0 0.2      Committer: 2-0
+			// R1 0...4    Committer: 3-1
+			// R2 n..3     Committer: 1-2
 			ts[0].initTraft(lid(2, 0), lid(1, 1), []int64{0, 2}, nil, nil, lid(4, 0))
 			ts[1].initTraft(lid(3, 1), lid(1, 1), []int64{0, 4}, nil, nil, lid(4, 1))
 			ts[2].initTraft(lid(1, 2), lid(2, 1), []int64{0, 3}, nil, []int64{0}, lid(4, 2))
@@ -526,20 +529,20 @@ func TestTRaft_VoteLoop(t *testing.T) {
 			// only one succ to elect.
 			// In 1 second, there wont be another winning election.
 			waitForMsg(ts, map[string]int{
-				"vote-win VotedFor:<Term:5 Id:1 >": 1,
+				"vote-win 005#001": 1,
 			})
 
 			ta.Equal(
 				join("[<001#001:000{set(x, 0)}-0→0>",
 					"<>",
-					"<001#001:002{set(x, 2)}-0→0>",
-					"<002#001:003{set(x, 3)}-0→0>",
+					"<>",
+					"<>",
 					"<001#001:004{set(x, 4)}-0→0>]"),
 				RecordsShortStr(ts[1].Logs, ""),
 			)
 
 			ta.Equal(lid(5, 1), ts[1].Status[1].Committer)
-			ta.Equal(bm(0, 0, 2, 3, 4), ts[1].Status[1].Accepted)
+			ta.Equal(bm(0, 0, 4), ts[1].Status[1].Accepted)
 			ta.Equal(bm(0), ts[1].Status[1].Committed)
 
 			ta.Equal(lid(2, 0), ts[1].Status[0].Committer)
@@ -595,7 +598,7 @@ func TestTRaft_Propose(t *testing.T) {
 			go ts[1].VoteLoop()
 
 			waitForMsg(ts, map[string]int{
-				"vote-win VotedFor:<Term:4 Id:1 >": 1,
+				"vote-win 004#001": 1,
 			})
 
 			// send to non-leader replica:
@@ -622,7 +625,7 @@ func TestTRaft_Propose(t *testing.T) {
 			go ts[1].VoteLoop()
 
 			waitForMsg(ts, map[string]int{
-				"vote-win VotedFor:<Term:4 Id:1 >": 1,
+				"vote-win 004#001": 1,
 			})
 
 			// TODO check state of other replicas
