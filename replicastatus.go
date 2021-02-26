@@ -13,17 +13,17 @@ func newStatusAcc(aterm, aid, lsn int64) *ReplicaStatus {
 	}
 }
 
-type logStat interface {
+type logStater interface {
 	GetCommitter() *LeaderId
 	GetAccepted() *TailBitmap
 }
 
-type leaderStat interface {
+type leaderStater interface {
 	GetVotedFor() *LeaderId
 	GetVoteExpireAt() int64
 }
 
-func CmpLogStatus(a, b logStat) int {
+func CmpLogStatus(a, b logStater) int {
 	r := a.GetCommitter().Cmp(b.GetCommitter())
 	if r != 0 {
 		return r
@@ -32,14 +32,14 @@ func CmpLogStatus(a, b logStat) int {
 	return cmpI64(a.GetAccepted().Len(), b.GetAccepted().Len())
 }
 
-func ExportLogStatus(ls logStat) *LogStatus {
+func ExportLogStatus(ls logStater) *LogStatus {
 	return &LogStatus{
 		Committer: ls.GetCommitter().Clone(),
 		Accepted:  ls.GetAccepted().Clone(),
 	}
 }
 
-func ExportLeaderStatus(ls leaderStat) *LeaderStatus {
+func ExportLeaderStatus(ls leaderStater) *LeaderStatus {
 	return &LeaderStatus{
 		VotedFor:     ls.GetVotedFor().Clone(),
 		VoteExpireAt: ls.GetVoteExpireAt(),

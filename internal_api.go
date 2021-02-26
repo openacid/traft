@@ -4,7 +4,7 @@ import context "context"
 
 func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
 	var reply *VoteReply
-	rst := tr.query( "func", func() error {
+	rst := tr.query( func() error {
 		reply= tr.hdlVoteReq(req)
 		return nil
 	})
@@ -18,7 +18,7 @@ func (tr *TRaft) LogForward(ctx context.Context, req *LogForwardReq) (*LogForwar
 	// can be sure to stale and should be cleaned.
 
 	var reply *LogForwardReply
-	rst := tr.query( "func", func() error {
+	rst := tr.query( func() error {
 		reply = tr.hdlLogForward(req)
 		return nil
 	})
@@ -30,7 +30,7 @@ func (tr *TRaft) Propose(ctx context.Context, cmd *Cmd) (*ProposeReply, error) {
 
 	finCh := make(chan *ProposeReply, 1)
 
-	rst := tr.query( "func", func() error {
+	rst := tr.query( func() error {
 		tr.hdlPropose(cmd, finCh)
 		return nil
 	})

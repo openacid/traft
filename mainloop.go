@@ -2,24 +2,22 @@ package traft
 
 import fmt "fmt"
 
+type queryBody struct {
+	arg   interface{}
+	rstCh chan *queryRst
+}
+
 type queryRst struct {
 	v   interface{}
 	err error
 }
 
-type queryBody struct {
-	operation string
-	arg       interface{}
-	rstCh     chan *queryRst
-}
-
 // For other goroutine to ask mainloop to query
-func (tr *TRaft) query(operation string, arg interface{}) *queryRst {
+func (tr *TRaft) query(arg interface{}) *queryRst {
 	rstCh := make(chan *queryRst)
-	tr.actionCh <- &queryBody{operation, arg, rstCh}
+	tr.actionCh <- &queryBody{arg, rstCh}
 	rst := <-rstCh
 	lg.Infow("chan-query",
-		"operation", operation,
 		"arg", arg,
 		"rst.err", rst.err,
 		"rst.v", toStr(rst.v))
@@ -40,17 +38,15 @@ func (tr *TRaft) Loop() {
 
 			tr.checkStatus()
 
-			switch a.operation {
-			case "func":
-				f := a.arg.(func() error)
+			switch f := a.arg.(type) {
+			case func() error:
 				err := f()
 				a.rstCh <- &queryRst{err: err}
-			case "funcv":
-				f := a.arg.(func() interface{})
+			case func() interface{}:
 				v := f()
 				a.rstCh <- &queryRst{v: v}
 			default:
-				panic("unknown action" + a.operation)
+				panic("unknown func signature:" + fmt.Sprintf("%v", a.arg))
 			}
 
 			tr.checkStatus()

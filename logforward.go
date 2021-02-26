@@ -74,7 +74,7 @@ func (tr *TRaft) forwardLog(
 				received |= 1 << uint(res.from.Position)
 				if config.IsQuorum(received) {
 
-					rst := tr.query("func", func() error {
+					rst := tr.query(func() error {
 						return tr.leaderUpdateCommitted(
 							committer, lsns,
 						)

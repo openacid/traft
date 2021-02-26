@@ -85,13 +85,8 @@ func (tr *TRaft) addlogs(cmds ...interface{}) {
 	}
 }
 
-type leaderAndVotes struct {
-	leaderStat *LeaderStatus
-	votes      []*VoteReply
-}
-
 // find the max committer log to fill in local log holes.
-func (tr *TRaft) internalMergeLogs(votes []*VoteReply) {
+func (tr *TRaft) mergeFollowerLogs(votes []*VoteReply) {
 
 	// TODO if the leader chose Logs[i] from replica `r`, e.g. R[r].Logs[i]
 	// then the logs R[r].Logs[:i] are safe to choose.
@@ -168,7 +163,7 @@ func (tr *TRaft) VoteLoop() {
 	followerSleep := time.Millisecond * 200
 
 	for tr.running {
-		leadst := tr.query("funcv", func() interface{} {
+		leadst := tr.query( func() interface{} {
 			return ExportLeaderStatus(tr.Status[tr.Id])
 		}).v.(*LeaderStatus)
 
@@ -200,11 +195,11 @@ func (tr *TRaft) VoteLoop() {
 			"VotedFor", leadst.VotedFor,
 			"leadst.VoteExpireAt-now", leadst.VoteExpireAt-now)
 
-		logst := tr.query("funcv", func() interface{} {
+		logst := tr.query(func() interface{} {
 			return ExportLogStatus(tr.Status[tr.Id])
 		}).v.(*LogStatus)
 
-		config := tr.query("funcv", func() interface{} {
+		config := tr.query( func() interface{} {
 			return tr.Config.Clone()
 		}).v.(*ClusterConfig)
 
@@ -214,7 +209,7 @@ func (tr *TRaft) VoteLoop() {
 
 		{
 			// update local vote first
-			err := tr.query("func", func() error {
+			err := tr.query( func() error {
 				me := tr.Status[tr.Id]
 				if leadst.VotedFor.Cmp(me.VotedFor) >= 0 {
 					me.VotedFor = leadst.VotedFor.Clone()
@@ -227,7 +222,7 @@ func (tr *TRaft) VoteLoop() {
 			}).err
 			if err != nil {
 				// voted for other replica
-				leadst = tr.query("funcv", func() interface{} {
+				leadst = tr.query( func() interface{} {
 					return ExportLeaderStatus(tr.Status[tr.Id])
 				}).v.(*LeaderStatus)
 
@@ -257,7 +252,7 @@ func (tr *TRaft) VoteLoop() {
 
 			lg.Infow("to-update-leader", "leadst", leadst.VoteExpireAt)
 
-			err := tr.query("func", func() error {
+			err := tr.query( func() error {
 				votes := voted
 
 				me := tr.Status[tr.Id]
@@ -266,7 +261,7 @@ func (tr *TRaft) VoteLoop() {
 					me.VotedFor = leadst.VotedFor.Clone()
 					me.VoteExpireAt = leadst.VoteExpireAt
 
-					tr.internalMergeLogs(votes)
+					tr.mergeFollowerLogs(votes)
 					// TODO update Committer to this replica
 					// then going on replicating these logs to others.
 					//
@@ -329,7 +324,7 @@ func (tr *TRaft) VoteLoop() {
 // higherTerm: if seen, upgrade term and retry
 func VoteOnce(
 	candidate *LeaderId,
-	logStatus logStat,
+	logStatus *LogStatus,
 	config *ClusterConfig,
 ) ([]*VoteReply, error, int64) {
 

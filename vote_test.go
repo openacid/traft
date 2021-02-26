@@ -348,7 +348,7 @@ func TestTRaft_query(t *testing.T) {
 	t1 := ts[0]
 	t1.initTraft(lid(1, 2), lid(3, 4), []int64{5}, nil, nil, lid(2, id1))
 
-	got := t1.query( "funcv", func() interface{}{
+	got := t1.query( func() interface{}{
 		return ExportLogStatus(t1.Status[t1.Id])
 	}).v.(*LogStatus)
 	ta.Equal("001#002", got.Committer.ShortStr())
