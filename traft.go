@@ -31,7 +31,8 @@ type TRaft struct {
 
 	grpcServer *grpc.Server
 
-	wg sync.WaitGroup
+	// wait group of all worker goroutines
+	workerWG sync.WaitGroup
 
 	Node
 }
@@ -73,7 +74,7 @@ func NewTRaft(id int64, idAddrs map[int64]string) *TRaft {
 
 	progs := make(map[int64]*ReplicaStatus, 0)
 	for _, m := range members {
-		progs[m.Id] = emptyProgress(m.Id)
+		progs[m.Id] = emptyReplicaStatus(m.Id)
 	}
 
 	node := &Node{
@@ -93,7 +94,7 @@ func NewTRaft(id int64, idAddrs map[int64]string) *TRaft {
 		actionCh:   actionCh,
 		MsgCh:      make(chan string, 1024),
 		grpcServer: nil,
-		wg:         sync.WaitGroup{},
+		workerWG:   sync.WaitGroup{},
 		Node:       *node,
 	}
 
@@ -129,9 +130,9 @@ func (tr *TRaft) StartServer() {
 }
 
 func (tr *TRaft) goit(f func()) {
-	tr.wg.Add(1)
+	tr.workerWG.Add(1)
 	go func() {
-		defer tr.wg.Done()
+		defer tr.workerWG.Done()
 		f()
 	}()
 }
@@ -162,7 +163,7 @@ func (tr *TRaft) Stop() {
 	close(tr.shutdown)
 	tr.running = false
 
-	tr.wg.Wait()
+	tr.workerWG.Wait()
 
 	lg.Infow("TRaft stopped")
 }
@@ -175,30 +176,6 @@ func (tr *TRaft) sleep(t time.Duration) {
 	}
 }
 
-func toStr(v interface{}) string {
-	type sstr interface {
-		ShortStr() string
-	}
-
-	type str interface {
-		String() string
-	}
-
-	{
-		ss, ok := v.(sstr)
-		if ok {
-			return ss.ShortStr()
-		}
-	}
-	{
-		ss, ok := v.(str)
-		if ok {
-			return ss.String()
-		}
-	}
-	return fmt.Sprintf("%v", v)
-
-}
 
 func (tr *TRaft) sendMsg(msg ...interface{}) {
 
@@ -218,13 +195,3 @@ func (tr *TRaft) sendMsg(msg ...interface{}) {
 	}
 }
 
-func emptyProgress(id int64) *ReplicaStatus {
-	return &ReplicaStatus{
-		// initially it votes for itself with term 0
-		VotedFor:  NewLeaderId(0, id),
-		Committer: nil,
-		Accepted:  NewTailBitmap(0),
-		Committed: NewTailBitmap(0),
-		Applied:   NewTailBitmap(0),
-	}
-}

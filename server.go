@@ -371,11 +371,7 @@ func VoteOnce(
 
 		go func(rinfo ReplicaInfo, ch chan *voteRst) {
 			rpcTo(rinfo.Addr, func(cli TRaftClient, ctx context.Context) {
-
-				// lg.Infow("grpc-send-req", "addr", rinfo.Addr)
 				reply, err := cli.Vote(ctx, req)
-				// lg.Infow("grpc-recv-reply", "from", rinfo, "reply", reply, "err", err)
-
 				ch <- &voteRst{&rinfo, reply, err}
 			})
 		}(*rinfo, ch)
@@ -386,16 +382,16 @@ func VoteOnce(
 	received |= 1 << uint(config.Members[id].Position)
 	higherTerm := int64(-1)
 	var logErr error
-	waitingFor := len(config.Members) - 1
+	pending := len(config.Members) - 1
 
-	for waitingFor > 0 {
+	for pending > 0 {
 		select {
 		case res := <-ch:
 
 			lg.Infow("vote-once:got-reply", "reply", res.reply, "err", res.err)
 
 			if res.err != nil {
-				waitingFor--
+				pending--
 				continue
 			}
 
@@ -426,7 +422,7 @@ func VoteOnce(
 				}
 			}
 
-			waitingFor--
+			pending--
 
 		case <-time.After(time.Second):
 			// timeout
