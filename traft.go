@@ -66,7 +66,7 @@ func NewTRaft(id int64, idAddrs map[int64]string) *TRaft {
 		}
 	}
 
-	conf := &ClusterConfig{
+	conf := &Cluster{
 		Members: members,
 	}
 	maxPos := conf.MaxPosition()

@@ -206,7 +206,7 @@ func (tr *TRaft) VoteLoop() {
 		var currVote *LeaderId
 		var expireAt int64
 		var logst *LogStatus
-		var config *ClusterConfig
+		var config *Cluster
 
 		now := uSecondI64()
 		lg.Infow("vote loop round start:",
@@ -340,7 +340,7 @@ func (tr *TRaft) VoteLoop() {
 func VoteOnce(
 	candidate *LeaderId,
 	logStatus *LogStatus,
-	config *ClusterConfig,
+	config *Cluster,
 ) ([]*VoteReply, error, int64) {
 
 	// TODO vote need cluster id:

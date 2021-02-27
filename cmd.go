@@ -21,7 +21,7 @@ func cmdValueShortStr(v isCmd_Value) string {
 		return fmt.Sprintf("%d", vv.VI64)
 	case *Cmd_VStr:
 		return vv.VStr
-		// TODO ClusterConfig
+		// TODO Cluster
 	default:
 		return fmt.Sprintf("%s", vv)
 	}

@@ -17,7 +17,7 @@ type logForwardRst struct {
 // forward log from leader to follower concurrently
 func (tr *TRaft) forwardLog(
 	committer *LeaderId,
-	config *ClusterConfig,
+	config *Cluster,
 	logs []*Record,
 	callback func(*logForwardRst),
 ) {

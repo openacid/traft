@@ -48,7 +48,7 @@ message Cmd {
         int64 VI64 = 32;
 
         // cluster config change: adding/removing members.
-        ClusterConfig VClusterConfig = 33;
+        Cluster VClusterConfig = 33;
     }
 }
 
@@ -128,7 +128,7 @@ message Node {
     // replica id of this replica.
     int64 Id = 3;
 
-    ClusterConfig Config = 1;
+    Cluster Config = 1;
 
     // From which log seq number we keeps here.
     int64 LogOffset = 4;
@@ -189,7 +189,7 @@ message ReplicaInfo {
     int64 Position = 3;
 }
 
-message ClusterConfig {
+message Cluster {
     map<int64, ReplicaInfo> Members = 11;
     repeated uint64 Quorums = 21;
 }

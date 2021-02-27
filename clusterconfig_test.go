@@ -10,7 +10,7 @@ func TestClusterConfig_SortedReplicaInfos(t *testing.T) {
 
 	ta := require.New(t)
 
-	cc := &ClusterConfig{
+	cc := &Cluster{
 		Members: map[int64]*ReplicaInfo{
 			1: {1, "111", 0},
 			2: {2, "222", 2},
@@ -41,7 +41,7 @@ func TestClusterConfig_IsQuorum(t *testing.T) {
 
 	ta := require.New(t)
 
-	cc := &ClusterConfig{
+	cc := &Cluster{
 		Members: map[int64]*ReplicaInfo{
 			1: {1, "111", 0},
 			2: {2, "222", 2},
