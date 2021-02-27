@@ -28,9 +28,9 @@ func TestTRaft_LogForward(t *testing.T) {
 	ts[1].initTraft(lid(3, 1), lid(0, 1), []int64{}, nil, nil, lid(5, 1))
 	ts[2].initTraft(lid(1, 2), lid(0, 1), []int64{}, nil, []int64{0}, lid(2, 2))
 
-	ts[0].addlogs()
-	ts[1].addlogs("x=0", "y=1", "x=2")
-	ts[2].addlogs("", "y=5")
+	ts[0].addLogs()
+	ts[1].addLogs("x=0", "y=1", "x=2")
+	ts[2].addLogs("", "y=5")
 
 	sendLogForward := func(addr string, req *LogForwardReq) *LogForwardReply {
 		var reply *LogForwardReply

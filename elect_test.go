@@ -308,7 +308,7 @@ func TestTRaft_VoteOnce(t *testing.T) {
 
 				for i, ls := range c.logs {
 					for _, l := range ls {
-						ts[i].addlogs(l)
+						ts[i].addLogs(l)
 					}
 				}
 
@@ -566,11 +566,11 @@ func TestTRaft_VoteLoop(t *testing.T) {
 
 			ts[2].Stop()
 
-			ts[0].addlogs(nil, nil, nil, "x=1")
+			ts[0].addLogs(nil, nil, nil, "x=1")
 			ts[0].Logs[3].Overrides = bm(0, 1, 3)
 			ts[0].Status[0].Accepted = bm(0, 1, 3)
 
-			ts[1].addlogs(nil, nil, nil, nil, "y=1")
+			ts[1].addLogs(nil, nil, nil, nil, "y=1")
 			ts[1].Logs[4].Overrides = bm(0, 4)
 			ts[1].Status[1].Accepted = bm(0, 4)
 
@@ -715,7 +715,7 @@ func TestTRaft_AddLog_nil(t *testing.T) {
 	id := int64(1)
 	tr := NewTRaft(id, map[int64]string{id: "123"})
 
-	tr.addlogs("x=1", "y=1", nil, "x=1")
+	tr.addLogs("x=1", "y=1", nil, "x=1")
 
 	ta.Equal(join(
 		"[<000#001:000{set(x, 1)}-0:1→0>",

@@ -153,8 +153,7 @@ func (tr *TRaft) hdlLogForward(req *LogForwardReq) *LogForwardReply {
 
 	// add new logs
 
-	newlogs := req.Logs
-	for _, r := range newlogs {
+	for _, r := range req.Logs {
 		lsn := r.Seq
 		idx := lsn - tr.LogOffset
 
@@ -162,8 +161,10 @@ func (tr *TRaft) hdlLogForward(req *LogForwardReq) *LogForwardReply {
 			tr.Logs = append(tr.Logs, &Record{})
 		}
 
-		if !tr.Logs[idx].Empty() && !tr.Logs[idx].Equal(r) {
-			panic("wtf")
+		if me.Accepted.Get(lsn) != 0 {
+			if !tr.Logs[idx].Empty() && !tr.Logs[idx].Equal(r) {
+				panic("wtf")
+			}
 		}
 		tr.Logs[idx] = r
 
