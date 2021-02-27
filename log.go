@@ -1,7 +1,7 @@
 package traft
 
 var (
-	emptyRecord = &Record{}
+	emptyRecord = &LogRecord{}
 )
 
 // a func for test purpose only
@@ -16,7 +16,7 @@ func (tr *TRaft) addLogs(cmds ...interface{}) {
 
 // Only a established leader should use this func.
 // no lock protection, must be called from Loop()
-func (tr *TRaft) AddLog(cmd *Cmd) *Record {
+func (tr *TRaft) AddLog(cmd *Cmd) *LogRecord {
 
 	me := tr.Status[tr.Id]
 
@@ -27,7 +27,7 @@ func (tr *TRaft) AddLog(cmd *Cmd) *Record {
 	return tr.addLogInternal(cmd)
 }
 
-func (tr *TRaft) GetLog(lsn int64) *Record {
+func (tr *TRaft) GetLog(lsn int64) *LogRecord {
 	idx := lsn - tr.LogOffset
 	r := tr.Logs[idx]
 	if r.Seq != lsn {
@@ -36,7 +36,7 @@ func (tr *TRaft) GetLog(lsn int64) *Record {
 	return r
 }
 
-func (tr *TRaft) addLogInternal(cmd *Cmd) *Record {
+func (tr *TRaft) addLogInternal(cmd *Cmd) *LogRecord {
 
 	me := tr.Status[tr.Id]
 

@@ -39,7 +39,7 @@ func (tr *TRaft) hdlPropose(cmd *Cmd, finCh chan<- *ProposeReply) {
 	go tr.forwardLog(
 		me.VotedFor.Clone(),
 		tr.Config.Clone(),
-		[]*Record{rec},
+		[]*LogRecord{rec},
 		func(rst *logForwardRst) {
 			if rst.err != nil {
 				finCh <- &ProposeReply{

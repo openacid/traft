@@ -6,9 +6,9 @@ import (
 )
 
 // NewRecord: without Overrides yet!!! TODO
-func NewRecord(leader *LeaderId, seq int64, cmd *Cmd) *Record {
+func NewRecord(leader *LeaderId, seq int64, cmd *Cmd) *LogRecord {
 
-	rec := &Record{
+	rec := &LogRecord{
 		Author: leader,
 		Seq:    seq,
 		Cmd:    cmd,
@@ -17,7 +17,7 @@ func NewRecord(leader *LeaderId, seq int64, cmd *Cmd) *Record {
 	return rec
 }
 
-func NewRecordOverride(leader *LeaderId, seq int64, cmd *Cmd, override *TailBitmap) *Record {
+func NewRecordOverride(leader *LeaderId, seq int64, cmd *Cmd, override *TailBitmap) *LogRecord {
 
 	rec := NewRecord(leader,seq,cmd)
 	rec.Overrides = NewTailBitmap(0, seq)
@@ -26,13 +26,13 @@ func NewRecordOverride(leader *LeaderId, seq int64, cmd *Cmd, override *TailBitm
 	return rec
 }
 
-// gogoproto would panic if a []*Record has a nil in it.
+// gogoproto would panic if a []*LogRecord has a nil in it.
 // Thus we use r.Cmd == nil  to indicate an absent log record.
-func (r *Record) Empty() bool {
+func (r *LogRecord) Empty() bool {
 	return r == nil || r.Cmd == nil
 }
 
-func (a *Record) Interfering(b *Record) bool {
+func (a *LogRecord) Interfering(b *LogRecord) bool {
 	if a == nil || b == nil {
 		return false
 	}
@@ -40,7 +40,7 @@ func (a *Record) Interfering(b *Record) bool {
 	return a.Cmd.Interfering(b.Cmd)
 }
 
-func (r *Record) ShortStr() string {
+func (r *LogRecord) ShortStr() string {
 	if r.Empty() {
 		return "<>"
 	}
@@ -54,7 +54,7 @@ func (r *Record) ShortStr() string {
 	)
 }
 
-func RecordsShortStr(rs []*Record, sep ...string) string {
+func RecordsShortStr(rs []*LogRecord, sep ...string) string {
 	s := ", "
 	if len(sep) > 0 {
 		s = sep[0]

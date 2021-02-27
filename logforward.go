@@ -1,7 +1,7 @@
 package traft
 
 import (
-	context "context"
+	"context"
 	"time"
 
 	"github.com/pkg/errors"
@@ -18,7 +18,7 @@ type logForwardRst struct {
 func (tr *TRaft) forwardLog(
 	committer *LeaderId,
 	config *Cluster,
-	logs []*Record,
+	logs []*LogRecord,
 	callback func(*logForwardRst),
 ) {
 
@@ -113,7 +113,7 @@ func (tr *TRaft) hdlLogForward(req *LogForwardReq) *LogForwardReply {
 	// See: https://blog.openacid.com/algo/paxos/#slide-42
 
 	if cr < 0 && now < me.VoteExpireAt {
-		lg.Infow("hdl-replicate: illegal committer",
+		lg.Infow("hdl-logforward: illegal committer",
 			"req.Commiter", req.Committer,
 			"me.VotedFor", me.VotedFor,
 			"me.VoteExpireAt-now", me.VoteExpireAt-now)
@@ -125,7 +125,6 @@ func (tr *TRaft) hdlLogForward(req *LogForwardReq) *LogForwardReply {
 	}
 
 	if cr > 0 {
-		// TODO test it
 		me.VotedFor = req.Committer.Clone()
 		me.VoteExpireAt = now + leaderLease
 	}
@@ -151,7 +150,7 @@ func (tr *TRaft) hdlLogForward(req *LogForwardReq) *LogForwardReply {
 			}
 
 			if me.Accepted.Get(r.Seq) == 0 {
-				tr.Logs[i] = &Record{}
+				tr.Logs[i] = &LogRecord{}
 			}
 		}
 	}
@@ -163,7 +162,7 @@ func (tr *TRaft) hdlLogForward(req *LogForwardReq) *LogForwardReply {
 		idx := lsn - tr.LogOffset
 
 		for int(idx) >= len(tr.Logs) {
-			tr.Logs = append(tr.Logs, &Record{})
+			tr.Logs = append(tr.Logs, &LogRecord{})
 		}
 
 		if me.Accepted.Get(lsn) != 0 {

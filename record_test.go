@@ -10,7 +10,7 @@ func TestNewRecord(t *testing.T) {
 
 	ta := require.New(t)
 
-	ta.Equal(&Record{
+	ta.Equal(&LogRecord{
 		Author: &LeaderId{1, 2},
 		Seq:    3,
 		Cmd: &Cmd{
@@ -30,7 +30,7 @@ func TestRecord_Interfering(t *testing.T) {
 	cmd := NewCmdI64
 
 	cases := []struct {
-		a, b *Record
+		a, b *LogRecord
 		want bool
 	}{
 		{nil, nil, false},

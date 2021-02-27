@@ -2,7 +2,7 @@ package traft
 
 // if the first log in v.Logs matches lsn, pop and return it.
 // Otherwise return nil.
-func (v *VoteReply) PopRecord(lsn int64) *Record {
+func (v *VoteReply) PopRecord(lsn int64) *LogRecord {
 	if len(v.Logs) == 0 {
 		return nil
 	}

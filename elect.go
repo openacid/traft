@@ -324,7 +324,7 @@ func (tr *TRaft) hdlVoteReq(req *VoteReq) *VoteReply {
 
 	// send back the logs I have but the candidate does not.
 
-	logs := make([]*Record, 0)
+	logs := make([]*LogRecord, 0)
 
 	lg.Infow("hdlVoteReq", "me.Accepted", me.Accepted)
 	lg.Infow("hdlVoteReq", "req.Accepted", req.Accepted)
@@ -418,8 +418,8 @@ func (tr *TRaft) mergeFollowerLogs(votes []*VoteReply) {
 }
 
 // getLog returns one log record if a log  with the specified lsn presents in any vote replies.
-func getLog(lsn int64, replies []*VoteReply) *Record {
-	var rec *Record
+func getLog(lsn int64, replies []*VoteReply) *LogRecord {
+	var rec *LogRecord
 	for _, vr := range replies {
 		r := vr.PopRecord(lsn)
 		if r == nil {

@@ -79,7 +79,7 @@ func NewTRaft(id int64, idAddrs map[int64]string) *TRaft {
 
 	node := &Node{
 		Config: conf,
-		Logs:   make([]*Record, 0),
+		Logs:   make([]*LogRecord, 0),
 		Id:     id,
 		Status: progs,
 	}

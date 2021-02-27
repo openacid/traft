@@ -2,8 +2,6 @@ syntax = "proto3";
 
 option go_package = ".;traft";
 
-// import "gogoproto/gogo.proto";
-
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 // option (gogoproto.goproto_unrecognized_all) = false;
@@ -13,7 +11,7 @@ option (gogoproto.goproto_enum_prefix_all) = false;
 // option (gogoproto.goproto_getters_all) = false;
 
 //
-// Unexchangeble logs: r1 and r3. They both modify the same key `x`.
+// Nonexchangeable logs: r1 and r3. They both modify the same key `x`.
 // r1 and r2, r2 and r3 are exchangeable.
 //
 //  r3: set x = 2  <-.
@@ -29,14 +27,6 @@ option (gogoproto.goproto_enum_prefix_all) = false;
 // Solution
 //
 // blabla TODO 
-
-
-// TODO: remove useless field in proto struct:
-//
-//   type LeaderId struct {
-//     state         protoimpl.MessageState
-//     sizeCache     protoimpl.SizeCache
-//     unknownFields protoimpl.UnknownFields
 
 // Cmd defines the action a log record does
 message Cmd {
@@ -55,7 +45,7 @@ message Cmd {
 // TailBitmap is a bitmap that has all its leading bits set to `1`.
 // Thus it is compressed with an Offset of all-ones position and a trailing
 // bitmap.
-// It is used to describe Record dependency etc.
+// It is used to describe LogRecord dependency etc.
 // 
 // The data structure is as the following described:
 //
@@ -75,17 +65,17 @@ message TailBitmap {
     int64 Reclamed = 3;
 }
 
-// Record is a log record
-message Record {
+// LogRecord is a log record
+message LogRecord {
     // Which leader initially proposed this log.
     // Author may not be the same with Committer, if Author fails when trying to
     // commit a log record.
     //
     // TODO It seems this field is useless. Because we already have `Accepted`.
     // This is different from the original raft:
-    // raft does not have a explicit concept `accepted`, which is enssential in
+    // raft does not have a explicit concept `accepted`, which is essential in
     // paxos.
-    // Instead, The `commited` in raft is defined as: leader forwards its
+    // Instead, The `committed` in raft is defined as: leader forwards its
     // own term log to a quorum.
     LeaderId Author = 1;
 
@@ -116,14 +106,6 @@ message LeaderId {
 // Then a leader is chosen from these candidates by their Current leader id.
 // The max LeaderId wins.
 
-//message Ballot {
-//    LeaderId Committer = 1;
-//    TailBitmap Accepted = 2;
-//
-//    LeaderId Current = 3;
-//}
-
-
 message Node {
     // replica id of this replica.
     int64 Id = 3;
@@ -132,7 +114,7 @@ message Node {
 
     // From which log seq number we keeps here.
     int64 LogOffset = 4;
-    repeated Record Logs = 2;
+    repeated LogRecord Logs = 2;
 
     // local view of every replica, including this node too.
     map<int64, ReplicaStatus> Status = 6;
@@ -194,20 +176,6 @@ message Cluster {
     repeated uint64 Quorums = 21;
 }
 
-//enum QueryOp {
-//    unknownOp = 0;
-//    getLogStat = 1;
-//    getLeaderStat = 2;
-//    getConfig =3;
-//    getVote = 4;
-//    setVoted = 5;
-//    setLeadership = 6;
-//    hdlProposeReq = 7;
-//    hdlLogForwardReq = 8;
-//    hdlCommitReq
-//
-//}
-
 message VoteReq {
     // who initiates the election
     LeaderId Candidate = 1;
@@ -250,12 +218,12 @@ message VoteReply {
 
     // The logs that voter has but leader candidate does not have.
     // For the leader to rebuild all possibly committed logs from a quorum.
-    repeated Record Logs = 30;
+    repeated LogRecord Logs = 30;
 }
 
 message LogForwardReq {
     LeaderId Committer = 1;
-    repeated Record Logs = 2;
+    repeated LogRecord Logs = 2;
 
     // Committed indicates logs committed by leader.
     // A follower should commit every log it has that is in Committed directly.

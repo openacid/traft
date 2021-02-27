@@ -29,7 +29,7 @@ func TestTRaft_LogForward(t *testing.T) {
 		return reply
 	}
 
-	logs := []*Record{
+	logs := []*LogRecord{
 		NewRecordOverride(lid(5,1), 0, toCmd("x=0"), nil),
 		NewRecordOverride(lid(5,1), 1, toCmd("y=1"), nil),
 		NewRecordOverride(lid(5,1), 2, toCmd("x=2"), bm(1)),
@@ -43,7 +43,7 @@ func TestTRaft_LogForward(t *testing.T) {
 		expire   int64
 
 		committer *LeaderId
-		logs      []*Record
+		logs      []*LogRecord
 		committed *TailBitmap
 
 		wantOK        bool

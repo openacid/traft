@@ -11,13 +11,13 @@ func TestVoteReply_Pop(t *testing.T) {
 	ta := require.New(t)
 
 	vr := &VoteReply{
-		Logs: []*Record{
+		Logs: []*LogRecord{
 			NewRecord(NewLeaderId(1, 2), 5, nil),
 			NewRecord(NewLeaderId(1, 2), 7, nil),
 		},
 	}
 
-	var got *Record
+	var got *LogRecord
 	ta.Nil(vr.PopRecord(4))
 
 	got = vr.PopRecord(5)

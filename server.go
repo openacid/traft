@@ -56,8 +56,8 @@ func buildPseudoLogs(
 	// log seq numbers to generate.
 	lsns []int64,
 	nilLogs map[int64]bool,
-) (int64, []*Record) {
-	logs := make([]*Record, 0)
+) (int64, []*LogRecord) {
+	logs := make([]*LogRecord, 0)
 	if len(lsns) == 0 {
 		return 0, logs
 	}
@@ -65,7 +65,7 @@ func buildPseudoLogs(
 	last := lsns[len(lsns)-1]
 	start := lsns[0]
 	for i := start; i <= last; i++ {
-		logs = append(logs, &Record{})
+		logs = append(logs, &LogRecord{})
 	}
 
 	for _, lsn := range lsns {
