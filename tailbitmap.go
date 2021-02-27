@@ -7,6 +7,7 @@ import (
 
 	proto "github.com/gogo/protobuf/proto"
 	"github.com/openacid/low/bitmap"
+	"github.com/openacid/low/mathext/util"
 )
 
 // reclaimThreshold is the size threshold in bit for reclamation of `Words`.
@@ -160,7 +161,73 @@ func (tb *TailBitmap) Union(tc *TailBitmap) {
 	tb.Compact()
 }
 
+func (ta *TailBitmap) Intersection(tb *TailBitmap) {
+
+	if tb == nil {
+		ta.Offset = 0
+		ta.Words = make([]uint64, 0)
+		ta.Reclamed = 0
+		return
+	}
+
+	la := ta.Offset + int64(len(ta.Words)*64)
+	lb := tb.Offset + int64(len(tb.Words)*64)
+
+	// 1111 1111 xxxx
+	// 1111 yyyy
+	if ta.Offset >= lb {
+		ta.Offset = tb.Offset
+		ta.Words = make([]uint64, len(tb.Words))
+		copy(ta.Words, tb.Words)
+
+		// building a new Words reclames unused spaces in it.
+		ta.Reclamed = ta.Offset
+		return
+	}
+
+	// 1111 xxxx
+	// 1111 1111 yyyy
+	if la <= tb.Offset {
+		return
+	}
+
+	s := util.MinI64(ta.Offset, tb.Offset)
+	e := util.MinI64(la, lb)
+	ws := make([]uint64, (e-s)>>6)
+	cur := int64(0)
+	i := int64(0)
+	j := int64(0)
+	if ta.Offset >= tb.Offset {
+		n := (ta.Offset - s) >> 6
+		n = util.MinI64(n, (e-s)>>6)
+		copy(ws, tb.Words[:n])
+		cur += n
+		j = n
+	} else {
+		n := (tb.Offset - s) >> 6
+		n = util.MinI64(n, (e-s)>>6)
+		copy(ws, ta.Words[:n])
+		cur += n
+		i = n
+	}
+
+	for cur < int64(len(ws)) {
+		ws[cur] = ta.Words[i] & tb.Words[j]
+		cur++
+		i++
+		j++
+	}
+
+	for len(ws) > 0 && ws[len(ws)-1] == 0 {
+		ws = ws[:len(ws)-1]
+	}
+	ta.Offset = s
+	ta.Words = ws
+	ta.Reclamed = s
+}
+
 // Diff AKA substraction A - B or  A \ B
+// TODO: This impl is wrong!!!
 func (tb *TailBitmap) Diff(tc *TailBitmap) {
 
 	if tc == nil {

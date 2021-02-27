@@ -443,6 +443,78 @@ func TestTailBitmap_Union(t *testing.T) {
 	}
 }
 
+func TestTailBitmap_Intersection(t *testing.T) {
+
+	ta := require.New(t)
+
+	cases := []struct {
+		input *TailBitmap
+		other *TailBitmap
+		want  *TailBitmap
+	}{
+		// 1111 xxxx
+		// nil
+		{
+			input: &TailBitmap{Offset: 64 * 1, Words: []uint64{1}, Reclamed: 0},
+			other: nil,
+			want:  &TailBitmap{Offset: 64 * 0, Words: []uint64{}, Reclamed: 0},
+		},
+
+		// 1111 xxxx
+		// 1111 1111 1111 yyyy
+		{
+			input: &TailBitmap{Offset: 64 * 1, Words: []uint64{1}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64 * 3, Words: []uint64{2}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64 * 1, Words: []uint64{1}, Reclamed: 0},
+		},
+
+		// 1111 1111 1111 xxxx xxxx
+		// 1111 yyyy
+		{
+			input: &TailBitmap{Offset: 64 * 3, Words: []uint64{1, 3}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64 * 1, Words: []uint64{2}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64 * 1, Words: []uint64{2}, Reclamed: 64 * 1},
+		},
+
+		// 1111 1111 xxxx xxxx
+		// 1111 1111 1111 yyyy yyyy
+		{
+			input: &TailBitmap{Offset: 64 * 2, Words: []uint64{1, 3}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64 * 3, Words: []uint64{2, 4}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64 * 2, Words: []uint64{1, 2 & 3}, Reclamed: 64 * 2},
+		},
+
+		// 1111 1111 xxxx xxxx xxxx xxxx
+		// 1111 1111 1111 yyyy yyyy
+		{
+			input: &TailBitmap{Offset: 64 * 2, Words: []uint64{1, 3, 7, 7}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64 * 3, Words: []uint64{2, 4}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64 * 2, Words: []uint64{1, 2 & 3, 7 & 4}, Reclamed: 64 * 2},
+		},
+
+		// 1111 1111 xxxx xxxx
+		// 1111 yyyy yyyy
+		{
+			input: &TailBitmap{Offset: 64 * 2, Words: []uint64{1, 3}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64 * 1, Words: []uint64{2, 4}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64 * 1, Words: []uint64{2}, Reclamed: 64 * 1},
+		},
+
+		// 1111 1111 xxxx xxxx
+		// 1111 yyyy yyyy yyyy yyyy
+		{
+			input: &TailBitmap{Offset: 64 * 2, Words: []uint64{1, 3}, Reclamed: 0},
+			other: &TailBitmap{Offset: 64 * 1, Words: []uint64{2, 2, 3, 4}, Reclamed: 0},
+			want:  &TailBitmap{Offset: 64 * 1, Words: []uint64{2, 1 & 2, 3 & 3}, Reclamed: 64 * 1},
+		},
+	}
+
+	for i, c := range cases {
+		c.input.Intersection(c.other)
+		ta.Equal(c.want, c.input, "%d-th: Get case: %+v", i+1, c)
+	}
+}
+
 func TestTailBitmap_Diff(t *testing.T) {
 
 	ta := require.New(t)
