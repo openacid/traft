@@ -143,11 +143,6 @@ message LogStatus {
     TailBitmap Accepted = 1;
 }
 
-message LeaderStatus {
-    LeaderId VotedFor = 10;
-    int64    VoteExpireAt = 11;
-}
-
 message ReplicaStatus {
 
     // last seen term+id

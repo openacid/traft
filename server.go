@@ -86,29 +86,30 @@ func (tr *TRaft) addlogs(cmds ...interface{}) {
 }
 
 // establishLeadership updates leader state when a election approved by a quorum.
-func (tr *TRaft) establishLeadership(currVote *LeaderId, votes []*VoteReply) {
+func (tr *TRaft) establishLeadership(currVote *LeaderId, replies []*VoteReply) {
 
 	me := tr.Status[tr.Id]
 
 	// not to update expire time.
 	// let the leader expire earlier than follower to reduce chance that follower reject replication from leader.
 
-	tr.mergeFollowerLogs(votes)
+	tr.mergeFollowerLogs(replies)
 
 	// then going on replicating these logs to others.
 	//
 	// TODO update local view of status of other replicas.
-	for _, v := range votes {
-		if v.Committer.Equal(me.Committer) {
-			tr.Status[v.Id].Accepted = v.Accepted.Clone()
+	for _, r := range replies {
+		follower := tr.Status[r.Id]
+		if r.Committer.Equal(me.Committer) {
+			follower.Accepted = r.Accepted.Clone()
 		} else {
 			// if committers are different, the leader can no be
 			// sure whether a follower has identical logs
-			tr.Status[v.Id].Accepted = v.Committed.Clone()
+			follower.Accepted = r.Committed.Clone()
 		}
-		tr.Status[v.Id].Committed = v.Committed.Clone()
+		follower.Committed = r.Committed.Clone()
 
-		tr.Status[v.Id].Committer = v.Committer.Clone()
+		follower.Committer = r.Committer.Clone()
 	}
 
 	// Leader accept all the logs it sees
@@ -224,14 +225,12 @@ func (tr *TRaft) VoteLoop() {
 				return nil
 			}
 
-			// need to vote
-			// vote myself
+			// init state for voting myself
 
 			me.VotedFor.Term++
 			me.VotedFor.Id = tr.Id
 			currVote = me.VotedFor.Clone()
 
-			// TODO leaderLease?
 			me.VoteExpireAt = uSecondI64() + leaderLease
 
 			return errors.Wrapf(ErrNeedElect, "expireAt-now: %d", expireAt-now)
@@ -280,8 +279,7 @@ func (tr *TRaft) VoteLoop() {
 				me := tr.Status[tr.Id]
 
 				if currVote.Cmp(me.VotedFor) == 0 {
-					// I did not vote other ones yet,
-					// and I am not leader.
+					// I did not vote other ones yet, and I am not leader.
 					// reset it.
 					me.VoteExpireAt = 0
 				}
@@ -293,7 +291,6 @@ func (tr *TRaft) VoteLoop() {
 			switch errors.Cause(err) {
 			case ErrStaleTermId:
 				slp(time.Millisecond*5 + time.Duration(rand.Int63n(int64(maxStaleTermSleep))))
-				// leadst.VotedFor.Term = higher + 1
 			case ErrTimeout:
 				slp(time.Millisecond * 10)
 			case ErrStaleLog:
@@ -323,10 +320,11 @@ func (tr *TRaft) VoteLoop() {
 
 		if updateErr != nil {
 			tr.sendMsg("vote-fail", "reason:fail-to-update", currVote)
-			lg.Infow("reload-leader",
-				"Id", id,
-				"leadst.VotedFor", currVote,
+			lg.Infow("vote-fail", "Id", id,
+				"currVote", currVote,
+				"err", updateErr.Error(),
 			)
+			continue
 		}
 
 		tr.sendMsg("vote-win", currVote)

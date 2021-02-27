@@ -18,11 +18,6 @@ type logStater interface {
 	GetAccepted() *TailBitmap
 }
 
-type leaderStater interface {
-	GetVotedFor() *LeaderId
-	GetVoteExpireAt() int64
-}
-
 func CmpLogStatus(a, b logStater) int {
 	r := a.GetCommitter().Cmp(b.GetCommitter())
 	if r != 0 {
@@ -36,13 +31,6 @@ func ExportLogStatus(ls logStater) *LogStatus {
 	return &LogStatus{
 		Committer: ls.GetCommitter().Clone(),
 		Accepted:  ls.GetAccepted().Clone(),
-	}
-}
-
-func ExportLeaderStatus(ls leaderStater) *LeaderStatus {
-	return &LeaderStatus{
-		VotedFor:     ls.GetVotedFor().Clone(),
-		VoteExpireAt: ls.GetVoteExpireAt(),
 	}
 }
 
