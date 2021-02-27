@@ -4,10 +4,21 @@ package traft
 
 import (
 	"time"
-	// "google.golang.org/protobuf/proto"
 )
 
 var leaderLease = int64(time.Second * 1)
+
+// init a TRaft for test, all logs are `set x=lsn`
+func (tr *TRaft) initTraft0(committer *LeaderId, votedFor *LeaderId, cmds...interface{}) {
+	id := tr.Id
+
+	tr.Status[id].Committer = committer.Clone()
+	tr.Status[id].VotedFor = votedFor.Clone()
+
+	tr.addlogs(cmds...)
+
+	tr.checkStatus()
+}
 
 // init a TRaft for test, all logs are `set x=lsn`
 func (tr *TRaft) initTraft(

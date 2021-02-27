@@ -2,7 +2,6 @@ package traft
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -185,11 +184,7 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 	}
 
 	for i, c := range cases {
-		fmt.Println("case-", i)
 		reply := testVote(c.cand, c.voter)
-
-		fmt.Println(reply.String())
-		fmt.Println(RecordsShortStr(reply.Logs))
 
 		ta.Equal(
 			c.want,
@@ -489,9 +484,9 @@ func TestTRaft_VoteLoop(t *testing.T) {
 	withCluster(t, "id2MaxCommitter",
 		[]int64{0, 1, 2},
 		func(t *testing.T, ts []*TRaft) {
-			ts[0].initTraft(lid(2, 1), lid(0, 1), []int64{2}, nil, nil, lid(4, 0))
-			ts[1].initTraft(lid(3, 2), lid(0, 1), []int64{2}, nil, nil, lid(4, 1))
-			ts[2].initTraft(lid(1, 3), lid(0, 1), []int64{2}, nil, nil, lid(4, 2))
+			ts[0].initTraft0(lid(2, 1), lid(4, 0), "x=1")
+			ts[1].initTraft0(lid(3, 2), lid(4, 1), "x=1")
+			ts[2].initTraft0(lid(1, 3), lid(4, 2), "x=1")
 
 			go ts[0].VoteLoop()
 			go ts[1].VoteLoop()
@@ -565,9 +560,9 @@ func TestTRaft_VoteLoop(t *testing.T) {
 
 			// R0 .1.3     Committer: 2-0; 3 overrides 1
 			// R1          Committer: 3-1
-			ts[0].initTraft(lid(3, 1), lid(1, 1), []int64{}, nil, nil, lid(4, 1))
-			ts[1].initTraft(lid(3, 1), lid(1, 1), []int64{}, nil, nil, lid(4, 1))
-			// ts[2].initTraft(lid(1, 2), lid(2, 1), []int64{}, nil, nil, lid(4, 2))
+			ts[0].initTraft0(lid(3, 1), lid(4, 1))
+			ts[1].initTraft0(lid(3, 1), lid(4, 1))
+			// ts[2].initTraft0(lid(1, 2), lid(4, 2))
 
 			ts[2].Stop()
 
