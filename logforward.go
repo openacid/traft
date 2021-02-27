@@ -14,7 +14,7 @@ type logForwardRst struct {
 	err   error
 }
 
-// forward log from leader to follower
+// forward log from leader to follower concurrently
 func (tr *TRaft) forwardLog(
 	committer *LeaderId,
 	config *ClusterConfig,
@@ -48,13 +48,13 @@ func (tr *TRaft) forwardLog(
 	}
 
 	received := uint64(0)
-	// I vote myself
+	// I already have the logs
 	received |= 1 << uint(config.Members[id].Position)
 
 	forwardTimeout := uSecond() + time.Second
 
-	waiting := len(config.Members) - 1
-	for waiting > 0 {
+	pending := len(config.Members) - 1
+	for pending > 0 {
 		select {
 		case <-time.After(forwardTimeout - uSecond()):
 			// timeout
@@ -65,7 +65,7 @@ func (tr *TRaft) forwardLog(
 			})
 			return
 		case res := <-ch:
-			waiting--
+			pending--
 			if res.err != nil {
 				continue
 			}
@@ -86,7 +86,7 @@ func (tr *TRaft) forwardLog(
 					} else {
 						// TODO let the root cause to generate the error
 						callback(&logForwardRst{
-							err: errors.Wrapf(ErrLeaderLost, "forward"),
+							err: errors.Wrapf(rst.err, "forward"),
 						})
 					}
 					return
@@ -96,13 +96,18 @@ func (tr *TRaft) forwardLog(
 	}
 }
 
+// hdlLogForward handles LogForward request on a follower
 func (tr *TRaft) hdlLogForward(req *LogForwardReq) *LogForwardReply {
-	id := tr.Id
-	me := tr.Status[id]
+	me := tr.Status[tr.Id]
 	now := uSecondI64()
+
 	cr := req.Committer.Cmp(me.VotedFor)
-	// TODO what if req.Committer > me.VotedFor?
-	if cr != 0 || now > me.VoteExpireAt {
+
+	// If req.Committer > me.VotedFor, it is a valid leader too.
+	// It is safe to accept its log.
+	// This is a common optimization of paxos: an Acceptor accepts request if rnd >= lastrnd.
+	// See: https://blog.openacid.com/algo/paxos/#slide-42
+	if cr < 0 || now > me.VoteExpireAt {
 		lg.Infow("hdl-replicate: illegal committer",
 			"req.Commiter", req.Committer,
 			"me.VotedFor", me.VotedFor,
@@ -114,14 +119,23 @@ func (tr *TRaft) hdlLogForward(req *LogForwardReq) *LogForwardReply {
 		}
 	}
 
+	if cr > 0 {
+		// TODO test it
+		me.VotedFor = req.Committer.Clone()
+		me.VoteExpireAt = now + leaderLease
+	}
+
+	// TODO apply req.Committed
+
 	cr = req.Committer.Cmp(me.Committer)
 	if cr > 0 {
-		lg.Infow("hdl-replicate: newer committer",
+		lg.Infow("hdl-log-forward: newer committer",
 			"req.Committer", req.Committer,
 			"me.Committer", me.Committer,
 		)
 
 		// if req.Committer is newer, discard all non-committed logs
+		// Because non-committed local log may have been overridden by some new leader.
 		me.Accepted = me.Committed.Clone()
 
 		i := len(tr.Logs) - 1
@@ -168,6 +182,9 @@ func (tr *TRaft) hdlLogForward(req *LogForwardReq) *LogForwardReply {
 	}
 
 	me.Committer = req.Committer.Clone()
+
+	// TODO test
+	me.UpdatedCommitte(req.Committer, req.Committed)
 
 	return &LogForwardReply{
 		OK:        true,

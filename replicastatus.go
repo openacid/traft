@@ -39,3 +39,15 @@ func ExportLogStatus(ls logStater) *LogStatus {
 func (a *ReplicaStatus) CmpAccepted(b *ReplicaStatus) int {
 	return CmpLogStatus(a, b)
 }
+
+// If I have a log from a leader and the leader has committed it.
+// I commit it too.
+func (a *ReplicaStatus) UpdatedCommitte(committer *LeaderId, committed *TailBitmap) {
+	if committer.Cmp(a.Committer) != 0 {
+		panic("can not accept committed from non-leader committer")
+	}
+
+	update := a.Accepted.Clone()
+	update.Intersection(committed)
+	a.Committed.Union(update)
+}

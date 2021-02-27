@@ -256,6 +256,10 @@ message VoteReply {
 message LogForwardReq {
     LeaderId Committer = 1;
     repeated Record Logs = 2;
+
+    // Committed indicates logs committed by leader.
+    // A follower should commit every log it has that is in Committed directly.
+    TailBitmap Committed = 3;
 }
 
 message LogForwardReply {

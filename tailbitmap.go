@@ -112,6 +112,13 @@ func (tb *TailBitmap) Clone() *TailBitmap {
 	return proto.Clone(tb).(*TailBitmap)
 }
 
+func (tb *TailBitmap) Normalize() *TailBitmap {
+	if tb.Words == nil {
+		tb.Words = make([]uint64, 0)
+	}
+	return tb
+}
+
 func (tb *TailBitmap) Union(tc *TailBitmap) {
 
 	if tc == nil {
