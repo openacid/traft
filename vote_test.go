@@ -55,7 +55,7 @@ func withCluster(t *testing.T,
 	stopAll(ts)
 }
 
-func TestTRaft_Vote(t *testing.T) {
+func TestTRaft_hdlVoteReq(t *testing.T) {
 
 	ta := require.New(t)
 
@@ -505,7 +505,7 @@ func TestTRaft_VoteLoop(t *testing.T) {
 			})
 		})
 
-	withCluster(t, "id2MaxLog",
+	withCluster(t, "id1MaxLog",
 		[]int64{0, 1, 2, 3, 4},
 		func(t *testing.T, ts []*TRaft) {
 			// we need 5 replica to collect different log from 2 replica
@@ -523,6 +523,7 @@ func TestTRaft_VoteLoop(t *testing.T) {
 
 			ts[3].Stop()
 			ts[4].Stop()
+
 			ts[1].Status[1].VotedFor = lid(3, 1)
 			go ts[1].VoteLoop()
 
@@ -554,6 +555,51 @@ func TestTRaft_VoteLoop(t *testing.T) {
 			// reduced Accepted to Committed
 			ta.Equal(bm(0, 0), ts[1].Status[2].Accepted)
 			ta.Equal(bm(0, 0), ts[1].Status[2].Committed)
+		})
+
+	withCluster(t, "id1LeaderMergeOverrides",
+		[]int64{0, 1, 2},
+		func(t *testing.T, ts []*TRaft) {
+			ta := require.New(t)
+			_ = ta
+
+			// R0 .1.3     Committer: 2-0; 3 overrides 1
+			// R1          Committer: 3-1
+			ts[0].initTraft(lid(3, 1), lid(1, 1), []int64{}, nil, nil, lid(4, 1))
+			ts[1].initTraft(lid(3, 1), lid(1, 1), []int64{}, nil, nil, lid(4, 1))
+			// ts[2].initTraft(lid(1, 2), lid(2, 1), []int64{}, nil, nil, lid(4, 2))
+
+			ts[2].Stop()
+
+			ts[0].addlogs(nil, nil, nil, "x=1")
+			ts[0].Logs[3].Overrides = bm(0, 1, 3)
+			ts[0].Status[0].Accepted = bm(0, 1, 3)
+
+			ts[1].addlogs(nil, nil, nil, nil, "y=1")
+			ts[1].Logs[4].Overrides = bm(0, 4)
+			ts[1].Status[1].Accepted = bm(0, 4)
+
+			go ts[1].VoteLoop()
+
+			// only one succ to elect.
+			// In 1 second, there wont be another winning election.
+			waitForMsg(ts, map[string]int{
+				"vote-win 005#001": 1,
+			})
+
+			ta.Equal(
+				join("[",
+					"<>",
+					"<>",
+					"<>",
+					"<004#001:003{set(x, 1)}-0:a→0>",
+					"<004#001:004{set(y, 1)}-0:10→0>",
+					"]"),
+				RecordsShortStr(ts[1].Logs, ""),
+			)
+
+			ta.Equal(lid(5, 1), ts[1].Status[1].Committer)
+			ta.Equal(bm(0, 1, 3, 4), ts[1].Status[1].Accepted)
 		})
 }
 
