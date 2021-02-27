@@ -17,6 +17,15 @@ func NewRecord(leader *LeaderId, seq int64, cmd *Cmd) *Record {
 	return rec
 }
 
+func NewRecordOverride(leader *LeaderId, seq int64, cmd *Cmd, override *TailBitmap) *Record {
+
+	rec := NewRecord(leader,seq,cmd)
+	rec.Overrides = NewTailBitmap(0, seq)
+	rec.Overrides.Union(override)
+
+	return rec
+}
+
 // gogoproto would panic if a []*Record has a nil in it.
 // Thus we use r.Cmd == nil  to indicate an absent log record.
 func (r *Record) Empty() bool {

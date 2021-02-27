@@ -2,6 +2,7 @@ package traft
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -410,6 +411,41 @@ func waitForMsg(ts []*TRaft, msgs map[string]int) {
 	}
 }
 
+func waitForAnyMsg(ts []*TRaft, msgs []string, total int) []string{
+
+	rst := []string{}
+
+	for {
+		msg := readMsg(ts)
+		for _, s := range msgs {
+			if strings.Contains(msg, s) {
+				total--
+				rst = append(rst, msg)
+				lg.Infow("got-msg", "msg", msg)
+			}
+		}
+
+		lg.Infow("require-msg", "msgs", msgs, "total", total)
+
+		if total == 0{
+			return rst
+		}
+	}
+}
+
+func findLeader(ts []*TRaft) int64{
+	votes := make([]int, len(ts))
+	for i, t := range ts {
+		id := t.Status[int64(i)].VotedFor.Id
+		votes[id] ++
+		if votes[id] > len(ts)/2 {
+			// TODO joint consensus
+			return id
+		}
+	}
+	return -1
+}
+
 func TestTRaft_VoteLoop(t *testing.T) {
 
 	lid := NewLeaderId
@@ -419,6 +455,8 @@ func TestTRaft_VoteLoop(t *testing.T) {
 		[]int64{0, 1, 2},
 		func(t *testing.T, ts []*TRaft) {
 			ta := require.New(t)
+
+			ts[2].Stop()
 
 			go ts[0].VoteLoop()
 
@@ -469,16 +507,23 @@ func TestTRaft_VoteLoop(t *testing.T) {
 		[]int64{0, 1, 2},
 		func(t *testing.T, ts []*TRaft) {
 
+			ta := require.New(t)
+
 			go ts[0].VoteLoop()
 			go ts[1].VoteLoop()
 			go ts[2].VoteLoop()
 
 			// only one succ to elect.
 			// In 1 second, there wont be another winning election.
-			waitForMsg(ts, map[string]int{
-				"vote-win":  1,
-				"vote-fail": 2,
-			})
+			got := waitForAnyMsg(ts, []string{
+				"vote-win",
+				"vote-fail",
+			},3)
+
+			winner := findLeader(ts)
+
+			ta.Contains(strings.Join(got,";"),
+				fmt.Sprintf("Id=%d vote-win", winner))
 		})
 
 	withCluster(t, "id2MaxCommitter",

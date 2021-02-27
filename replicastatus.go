@@ -55,7 +55,7 @@ func (a *ReplicaStatus) CmpAccepted(b *ReplicaStatus) int {
 
 // If I have a log from a leader and the leader has committed it.
 // I commit it too.
-func (a *ReplicaStatus) UpdatedCommitte(committer *LeaderId, committed *TailBitmap) {
+func (a *ReplicaStatus) UpdatedCommitted(committer *LeaderId, committed *TailBitmap) {
 	if committer.Cmp(a.Committer) != 0 {
 		panic("can not accept committed from non-leader committer")
 	}

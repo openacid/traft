@@ -14,23 +14,8 @@ func TestTRaft_LogForward(t *testing.T) {
 	ta := require.New(t)
 	_ = ta
 
-	ids := []int64{0, 1, 2}
-
-	ts := serveCluster(ids)
-	defer stopAll(ts)
-
 	lid := NewLeaderId
 	bm := NewTailBitmap
-
-	// init cluster
-	// give ts[1] a highest term thus to be a leader
-	ts[0].initTraft(lid(2, 0), lid(0, 1), []int64{}, nil, nil, lid(3, 0))
-	ts[1].initTraft(lid(3, 1), lid(0, 1), []int64{}, nil, nil, lid(5, 1))
-	ts[2].initTraft(lid(1, 2), lid(0, 1), []int64{}, nil, []int64{0}, lid(2, 2))
-
-	ts[0].addLogs()
-	ts[1].addLogs("x=0", "y=1", "x=2")
-	ts[2].addLogs("", "y=5")
 
 	sendLogForward := func(addr string, req *LogForwardReq) *LogForwardReply {
 		var reply *LogForwardReply
@@ -44,7 +29,11 @@ func TestTRaft_LogForward(t *testing.T) {
 		return reply
 	}
 
-	logs := ts[1].Logs
+	logs := []*Record{
+		NewRecordOverride(lid(5,1), 0, toCmd("x=0"), nil),
+		NewRecordOverride(lid(5,1), 1, toCmd("y=1"), nil),
+		NewRecordOverride(lid(5,1), 2, toCmd("x=2"), bm(1)),
+	}
 
 	sec1k := int64(time.Second * 1000)
 	cases := []struct {
@@ -67,11 +56,6 @@ func TestTRaft_LogForward(t *testing.T) {
 			0, lid(3, 0), sec1k,
 			lid(1, 2), logs[0:], nil,
 			false, lid(3, 0), nil, nil, nil,
-		},
-		{"VotedForExpired",
-			0, lid(2, 2), -sec1k,
-			lid(1, 2), logs[0:], nil,
-			false, lid(2, 2), nil, nil, nil,
 		},
 		{"accept/log2",
 			0, lid(3, 1), sec1k,
@@ -113,12 +97,45 @@ func TestTRaft_LogForward(t *testing.T) {
 				"<005#001:002{set(x, 2)}-0:5→0>",
 			},
 		},
+		{"accept/log12/overrideVotedFor",
+			2, lid(2, 1), sec1k,
+			lid(3, 1), logs[1:], nil,
+			true, lid(3, 1), bm(3), bm(1),
+			[]string{
+				"<>",
+				"<005#001:001{set(y, 1)}-0:2→0>",
+				"<005#001:002{set(x, 2)}-0:5→0>",
+			},
+		},
+		{"accept/log12/overrideExpiredVotedFor",
+			2, lid(2, 1), -sec1k,
+			lid(3, 1), logs[1:], nil,
+			true, lid(3, 1), bm(3), bm(1),
+			[]string{
+				"<>",
+				"<005#001:001{set(y, 1)}-0:2→0>",
+				"<005#001:002{set(x, 2)}-0:5→0>",
+			},
+		},
 	}
 
 	for _, c := range cases {
-		t.Run(
+
+		withCluster(t,
 			fmt.Sprintf("%d-to-%d/%s", 1, c.to, c.name),
-			func(t *testing.T) {
+			[]int64{0, 1, 2},
+			func(t *testing.T, ts []*TRaft) {
+				ta := require.New(t)
+				_ = ta
+
+				ts[0].initTraft(lid(2, 0), lid(0, 1), []int64{}, nil, nil, lid(3, 0))
+				ts[1].initTraft(lid(3, 1), lid(0, 1), []int64{}, nil, nil, lid(5, 1))
+				ts[2].initTraft(lid(1, 2), lid(0, 1), []int64{}, nil, []int64{0}, lid(2, 2))
+
+				ts[0].addLogs()
+				ts[1].addLogs("x=0", "y=1", "x=2")
+				ts[2].addLogs("", "y=5")
+
 				dst := ts[c.to].Status[c.to]
 				dst.VotedFor = c.votedFor
 				dst.VoteExpireAt = uSecondI64() + c.expire
@@ -150,6 +167,7 @@ func TestTRaft_LogForward(t *testing.T) {
 					ta.Equal("["+join(c.wantLogs...)+"]",
 						RecordsShortStr(ts[c.to].Logs, ""))
 				}
+
 			})
 	}
 }

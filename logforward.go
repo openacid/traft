@@ -97,9 +97,13 @@ func (tr *TRaft) forwardLog(
 }
 
 // hdlLogForward handles LogForward request on a follower
+// LogForward is similar to paxos-phase-2.
 func (tr *TRaft) hdlLogForward(req *LogForwardReq) *LogForwardReply {
 	me := tr.Status[tr.Id]
 	now := uSecondI64()
+
+	lg.Infow("hdl-logforward", "req", req)
+	lg.Infow("hdl-logforward", "me", me)
 
 	cr := req.Committer.Cmp(me.VotedFor)
 
@@ -107,7 +111,8 @@ func (tr *TRaft) hdlLogForward(req *LogForwardReq) *LogForwardReply {
 	// It is safe to accept its log.
 	// This is a common optimization of paxos: an Acceptor accepts request if rnd >= lastrnd.
 	// See: https://blog.openacid.com/algo/paxos/#slide-42
-	if cr < 0 || now > me.VoteExpireAt {
+
+	if cr < 0 && now < me.VoteExpireAt {
 		lg.Infow("hdl-replicate: illegal committer",
 			"req.Commiter", req.Committer,
 			"me.VotedFor", me.VotedFor,
@@ -169,6 +174,9 @@ func (tr *TRaft) hdlLogForward(req *LogForwardReq) *LogForwardReply {
 		tr.Logs[idx] = r
 
 		me.Accepted.Union(r.Overrides)
+
+		lg.Infow("hdl-logforward", "accept-log", r)
+		lg.Infow("hdl-logforward", "accepted", me.Accepted)
 	}
 
 	// TODO refine me
@@ -184,8 +192,7 @@ func (tr *TRaft) hdlLogForward(req *LogForwardReq) *LogForwardReply {
 
 	me.Committer = req.Committer.Clone()
 
-	// TODO test
-	me.UpdatedCommitte(req.Committer, req.Committed)
+	me.UpdatedCommitted(req.Committer, req.Committed)
 
 	return &LogForwardReply{
 		OK:        true,
