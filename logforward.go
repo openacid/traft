@@ -1,7 +1,6 @@
 package traft
 
 import (
-	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -40,7 +39,7 @@ func (tr *TRaft) forwardLog(
 
 		lg.Infow("logforward:recv-reply", "res", res)
 
-		if atomic.LoadInt32(&sess.quorum) == 1 {
+		if sess.updateOKBitmap(res) {
 
 			rst := tr.query(func() error {
 				return tr.leaderUpdateCommitted(

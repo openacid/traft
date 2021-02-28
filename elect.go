@@ -1,7 +1,6 @@
 package traft
 
 import (
-	"context"
 	"math/rand"
 	"time"
 
@@ -180,72 +179,38 @@ func ElectOnce(
 		err   error
 	}
 
-	ch := make(chan *voteRst)
+	higherTerm := int64(-1)
+	var logErr error
 
-	for _, rinfo := range cluster.Members {
-		if rinfo.Id == id {
+	timeout := time.Second
+	sess := rpcToAll(id, cluster, meth.Elect, req, timeout)
+
+	for res := range sess.resCh {
+
+		reply := res.reply.(*ElectReply)
+		lg.Infow("elect:recv-reply", "reply", reply, "res.err", res.err)
+
+		if reply.OK {
+			replies = append(replies, reply)
+			if sess.updateOKBitmap(res) {
+				// do not cancel
+				return replies, nil, -1
+			}
 			continue
 		}
 
-		go func(rinfo ReplicaInfo, ch chan *voteRst) {
-			rpcTo(rinfo.Addr, func(cli TRaftClient, ctx context.Context) {
-				reply, err := cli.Elect(ctx, req)
-				ch <- &voteRst{&rinfo, reply, err}
-			})
-		}(*rinfo, ch)
-	}
+		if reply.VotedFor.Cmp(candidate) > 0 {
+			higherTerm = util.MaxI64(higherTerm, reply.VotedFor.Term)
+		}
 
-	received := uint64(0)
-	// I vote myself
-	received |= 1 << uint(cluster.Members[id].Position)
-	higherTerm := int64(-1)
-	var logErr error
-	pending := len(cluster.Members) - 1
-
-	for pending > 0 {
-		select {
-		case res := <-ch:
-
-			lg.Infow("vote-once:got-reply", "reply", res.reply, "err", res.err)
-
-			if res.err != nil {
-				pending--
-				continue
-			}
-
-			repl := res.reply
-
-			if repl.VotedFor.Equal(candidate) {
-				// vote granted
-				replies = append(replies, repl)
-
-				received |= 1 << uint(res.from.Position)
-				if cluster.IsQuorum(received) {
-					// TODO cancel timer
-					return replies, nil, -1
-				}
-			} else {
-				if repl.VotedFor.Cmp(candidate) > 0 {
-					higherTerm = util.MaxI64(higherTerm, repl.VotedFor.Term)
-				}
-
-				if CmpLogStatus(repl, logStatus) > 0 {
-					// TODO cancel timer
-					logErr = errors.Wrapf(ErrStaleLog,
-						"local: committer:%s max-lsn:%d remote: committer:%s max-lsn:%d",
-						logStatus.GetCommitter().ShortStr(),
-						logStatus.GetAccepted().Len(),
-						repl.Committer.ShortStr(),
-						repl.Accepted.Len())
-				}
-			}
-
-			pending--
-
-		case <-time.After(time.Second):
-			// timeout
+		if CmpLogStatus(reply, logStatus) > 0 {
 			// TODO cancel timer
-			return nil, errors.Wrapf(ErrTimeout, "voting"), higherTerm
+			logErr = errors.Wrapf(ErrStaleLog,
+				"local: committer:%s max-lsn:%d remote: committer:%s max-lsn:%d",
+				logStatus.GetCommitter().ShortStr(),
+				logStatus.GetAccepted().Len(),
+				reply.Committer.ShortStr(),
+				reply.Accepted.Len())
 		}
 	}
 
@@ -267,7 +232,7 @@ func (tr *TRaft) hdlElectReq(req *ElectReq) *ElectReply {
 	// A vote reply just send back a voter's status.
 	// It is the candidate's responsibility to check if a voter granted it.
 	repl := &ElectReply{
-		OK:false,
+		OK:        false,
 		Id:        id,
 		VotedFor:  me.VotedFor.Clone(),
 		Committer: me.Committer.Clone(),

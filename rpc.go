@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	meth = struct{
+	meth = struct {
 		LogForward, Elect, Propose string
 	}{
 		LogForward: "LogForward",
@@ -22,11 +22,14 @@ var (
 
 // rpcResult is a container of rpc reply and other supporting info.
 type rpcResult struct {
+	ri     ReplicaInfo
 	addr   string
 	method string
 
 	reply interface{}
 	err   error
+
+	quorum int32
 }
 
 // rpcSession is a session of RPCs to all members in a cluster except the sender.
@@ -58,9 +61,21 @@ type rpcSession struct {
 
 	// count of unresponded peers
 	pending int64
+}
+type getOKer interface {
+	GetOK() bool
+}
 
-	// whether a quorum is constitued, e.g., 3/5 positive replies received.
-	quorum int32
+// return if quorum constituted.
+func (s *rpcSession) updateOKBitmap(res *rpcResult) bool {
+	if res.reply.(getOKer).GetOK() {
+		s.okBitmap |= 1 << uint(res.ri.Position)
+	}
+	if s.cluster.IsQuorum(s.okBitmap) {
+		return true
+	}
+	return false
+
 }
 
 // send rpc to addr.
@@ -107,7 +122,6 @@ func rpcToAll(
 
 		okBitmap: 1 << uint(ms[id].Position),
 		pending:  int64(len(ms) - 1),
-		quorum:   0,
 	}
 
 	for _, m := range cluster.Members {
@@ -116,7 +130,20 @@ func rpcToAll(
 		}
 		go func(ri ReplicaInfo) {
 			res := rpcToPeer(ri, sess)
-			sess.resCh <- res
+			if res.err == nil {
+				// if there is a non-business error, no need to send back result
+				sess.resCh <- res
+			}
+
+			// pending will be read by other goroutine thus must be read/written
+			// atomically.
+			pending := atomic.AddInt64(&sess.pending, -1)
+
+			lg.Infow("rpcToPeer", "pending", pending)
+
+			if pending == 0 {
+				close(sess.resCh)
+			}
 		}(*m)
 	}
 
@@ -127,10 +154,10 @@ func rpcToAll(
 // It also update essential info such as:
 // - pending: the N.O. unfinished rpcs.
 // - okBitmap: a bitmap indicates which peer responded a reply with OK=true.
-// - quorum: whether OK replies constitue a quorum.
 func rpcToPeer(ri ReplicaInfo, sess *rpcSession) *rpcResult {
 
 	res := &rpcResult{
+		ri:     ri,
 		addr:   ri.Addr,
 		method: sess.method,
 		reply:  nil,
@@ -148,27 +175,9 @@ func rpcToPeer(ri ReplicaInfo, sess *rpcSession) *rpcResult {
 	res.reply = newReply(sess.method)
 	res.err = conn.Invoke(sess.ctx, "/TRaft/"+sess.method, sess.req, res.reply)
 
-	// pending will be read by other goroutine thus must be read/written
-	// atomically.
-	atomic.AddInt64(&sess.pending, -1)
-
 	if res.err != nil {
 		lg.Infow("rpc-reply", "err", err)
 		return res
-	}
-
-	type getOKer interface {
-		GetOK() bool
-	}
-	if !res.reply.(getOKer).GetOK() {
-		return res
-	}
-
-	// okBitmap will be read by other goroutine thus must be read/written
-	// atomically.
-	bm := casOrU64(&sess.okBitmap, uint64(1)<<uint(ri.Position))
-	if sess.cluster.IsQuorum(bm) {
-		atomic.StoreInt32(&sess.quorum, 1)
 	}
 
 	return res
