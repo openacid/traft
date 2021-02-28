@@ -2,6 +2,7 @@ package traft
 
 import (
 	"math/rand"
+	"sync/atomic"
 	"time"
 
 	"github.com/openacid/low/mathext/util"
@@ -19,7 +20,7 @@ func (tr *TRaft) ElectLoop() {
 	heartBeatSleep := time.Millisecond * 200
 	followerSleep := time.Millisecond * 200
 
-	for tr.running {
+	for atomic.LoadInt64(&tr.running) == 1 {
 		var currVote *LeaderId
 		var expireAt int64
 		var logst *LogStatus

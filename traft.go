@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	grpc "google.golang.org/grpc"
@@ -15,7 +16,7 @@ import (
 )
 
 type TRaft struct {
-	running bool
+	running int64
 
 	// close it to notify all goroutines to shutdown.
 	shutdown chan struct{}
@@ -89,7 +90,7 @@ func NewTRaft(id int64, idAddrs map[int64]string) *TRaft {
 	actionCh := make(chan *queryBody)
 
 	tr := &TRaft{
-		running:    true,
+		running:    1,
 		shutdown:   shutdown,
 		actionCh:   actionCh,
 		MsgCh:      make(chan string, 1024),
@@ -154,14 +155,14 @@ func (tr *TRaft) Stop() {
 	// tr.grpcServer.Stop() does not wait.
 	tr.grpcServer.GracefulStop()
 
-	if !tr.running {
+	if atomic.LoadInt64(&tr.running) == 0 {
 		lg.Infow("TRaft already stopped")
 		return
 	}
 
 	lg.Infow("close shutdown")
 	close(tr.shutdown)
-	tr.running = false
+	atomic.StoreInt64(&tr.running, 0)
 
 	tr.workerWG.Wait()
 
@@ -175,7 +176,6 @@ func (tr *TRaft) sleep(t time.Duration) {
 	case <-tr.shutdown:
 	}
 }
-
 
 func (tr *TRaft) sendMsg(msg ...interface{}) {
 
@@ -194,4 +194,3 @@ func (tr *TRaft) sendMsg(msg ...interface{}) {
 		lg.Infow("fail-send-msg", "msg", vv)
 	}
 }
-
