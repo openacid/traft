@@ -1,12 +1,9 @@
 package traft
 
 import (
-	context "context"
 	"fmt"
 	"strings"
 	"time"
-
-	grpc "google.golang.org/grpc"
 )
 
 func cmpI64(a, b int64) int {
@@ -59,22 +56,3 @@ func serveCluster(ids []int64) []*TRaft {
 	return trafts
 }
 
-// send rpc to addr.
-// TODO use a single loop to send to one replica
-func rpcTo(addr string,
-	action func(TRaftClient, context.Context)) {
-
-	conn, err := grpc.Dial(addr, grpc.WithInsecure())
-	if err != nil {
-		// TODO check error
-		panic("wooooooh")
-	}
-	defer conn.Close()
-
-	cli := NewTRaftClient(conn)
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
-	action(cli, ctx)
-}

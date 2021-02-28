@@ -1,7 +1,7 @@
 package traft
 
 import (
-	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -32,68 +32,40 @@ func (tr *TRaft) forwardLog(
 
 	id := tr.Id
 
-	ch := make(chan *logForwardRst)
+	// TODO
+	timeout := time.Second
+	sess := rpcToAll(id, config, meth.LogForward, req, timeout)
 
-	for _, m := range config.Members {
-		if m.Id == id {
-			continue
-		}
+	for res := range sess.resCh {
 
-		go func(ri ReplicaInfo) {
-			rpcTo(ri.Addr, func(cli TRaftClient, ctx context.Context) {
-				reply, err := cli.LogForward(ctx, req)
-				ch <- &logForwardRst{&ri, reply, err}
+		lg.Infow("logforward:recv-reply", "res", res)
+
+		if atomic.LoadInt32(&sess.quorum) == 1 {
+
+			rst := tr.query(func() error {
+				return tr.leaderUpdateCommitted(
+					committer, lsns,
+				)
 			})
-		}(*m)
-	}
 
-	received := uint64(0)
-	// I already have the logs
-	received |= 1 << uint(config.Members[id].Position)
-
-	forwardTimeout := uSecond() + time.Second
-
-	pending := len(config.Members) - 1
-	for pending > 0 {
-		select {
-		case <-time.After(forwardTimeout - uSecond()):
-			// timeout
-			// TODO cancel timer
-			lg.Infow("forward:timeout", "cmtr", committer.ShortStr())
-			callback(&logForwardRst{
-				err: errors.Wrapf(ErrTimeout, "forward"),
-			})
+			if rst.err == nil {
+				lg.Infow("forward:a-quorum-done")
+				callback(&logForwardRst{})
+			} else {
+				// TODO let the root cause to generate the error
+				callback(&logForwardRst{
+					err: errors.Wrapf(rst.err, "forward"),
+				})
+			}
+			// LogForward does not cancel, try best to send logs to followers.
 			return
-		case res := <-ch:
-			pending--
-			if res.err != nil {
-				continue
-			}
-
-			if res.reply.OK {
-				received |= 1 << uint(res.from.Position)
-				if config.IsQuorum(received) {
-
-					rst := tr.query(func() error {
-						return tr.leaderUpdateCommitted(
-							committer, lsns,
-						)
-					})
-
-					if rst.err == nil {
-						lg.Infow("forward:a-quorum-done")
-						callback(&logForwardRst{})
-					} else {
-						// TODO let the root cause to generate the error
-						callback(&logForwardRst{
-							err: errors.Wrapf(rst.err, "forward"),
-						})
-					}
-					return
-				}
-			}
 		}
 	}
+
+	lg.Infow("forward:timeout", "cmtr", committer.ShortStr())
+	callback(&logForwardRst{
+		err: errors.Wrapf(ErrTimeout, "forward"),
+	})
 }
 
 // hdlLogForward handles LogForward request on a follower
