@@ -93,6 +93,30 @@ message LogRecord {
     TailBitmap Overrides = 40;
 }
 
+/*
+ * // SSValue is the value structure in snapshot.
+ * message SSValue {
+ * 
+ *     oneof Value {
+ *         string VStr = 31;
+ *         int64 VI64 = 32;
+ *     }
+ * 
+ *     // The last log seq number modifying this value.
+ *     int64 Lsn = 40;
+ * }
+ * 
+ * message Snapshot {
+ *     map<string, SnapShotValue> KVs = 1;
+ *     int64 WAL
+ * }
+ * 
+ * 
+ * message WALRecord {
+ *     
+ * 
+ * }
+ */
 
 message LeaderId {
     int64 Term = 1;
@@ -176,7 +200,7 @@ message Cluster {
     repeated uint64 Quorums = 21;
 }
 
-message VoteReq {
+message ElectReq {
     // who initiates the election
     LeaderId Candidate = 1;
 
@@ -190,7 +214,7 @@ message VoteReq {
     TailBitmap Accepted = 3;
 }
 
-message VoteReply {
+message ElectReply {
     // the replica id this reply comes from
     int64 Id = 1;
 
@@ -252,7 +276,7 @@ message ProposeReply {
 }
 
 service TRaft {
-    rpc Vote (VoteReq) returns (VoteReply) {}
+    rpc Elect (ElectReq) returns (ElectReply) {}
     rpc LogForward (LogForwardReq) returns (LogForwardReply) {}
     rpc Propose (Cmd) returns (ProposeReply) {}
 }

@@ -72,25 +72,25 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 	testVote := func(
 		cand candStat,
 		voter voterStat,
-	) *VoteReply {
+	) *ElectReply {
 
 		t1.initTraft(
 			voter.committer, voter.author, voter.logs, voter.nilLogs, nil,
 			voter.votedFor,
 		)
 
-		req := &VoteReq{
+		req := &ElectReq{
 			Candidate: cand.candidateId,
 			Committer: cand.committer,
 			Accepted:  bm(0, cand.logs...),
 		}
 
-		var reply *VoteReply
+		var reply *ElectReply
 		addr := t1.Config.Members[id].Addr
 
 		rpcTo(addr, func(cli TRaftClient, ctx context.Context) {
 			var err error
-			reply, err = cli.Vote(ctx, req)
+			reply, err = cli.Elect(ctx, req)
 			if err != nil {
 				panic("wtf")
 			}
@@ -313,7 +313,7 @@ func TestTRaft_VoteOnce(t *testing.T) {
 					}
 				}
 
-				voted, err, higher := VoteOnce(
+				voted, err, higher := ElectOnce(
 					c.candidate,
 					ExportLogStatus(ts[0].Status[0]),
 					ts[0].Config.Clone(),
@@ -458,7 +458,7 @@ func TestTRaft_VoteLoop(t *testing.T) {
 
 			ts[2].Stop()
 
-			go ts[0].VoteLoop()
+			go ts[0].ElectLoop()
 
 			waitForMsg(ts, map[string]int{
 				"vote-win 001#000": 1,
@@ -478,7 +478,7 @@ func TestTRaft_VoteLoop(t *testing.T) {
 		func(t *testing.T, ts []*TRaft) {
 			ta := require.New(t)
 
-			go ts[1].VoteLoop()
+			go ts[1].ElectLoop()
 			waitForMsg(ts, map[string]int{
 				"vote-win 001#001": 1,
 			})
@@ -493,8 +493,8 @@ func TestTRaft_VoteLoop(t *testing.T) {
 		[]int64{0, 1, 2},
 		func(t *testing.T, ts []*TRaft) {
 
-			go ts[0].VoteLoop()
-			go ts[1].VoteLoop()
+			go ts[0].ElectLoop()
+			go ts[1].ElectLoop()
 
 			// only one succ to elect.
 			// In 1 second, there wont be another winning election.
@@ -509,9 +509,9 @@ func TestTRaft_VoteLoop(t *testing.T) {
 
 			ta := require.New(t)
 
-			go ts[0].VoteLoop()
-			go ts[1].VoteLoop()
-			go ts[2].VoteLoop()
+			go ts[0].ElectLoop()
+			go ts[1].ElectLoop()
+			go ts[2].ElectLoop()
 
 			// only one succ to elect.
 			// In 1 second, there wont be another winning election.
@@ -533,9 +533,9 @@ func TestTRaft_VoteLoop(t *testing.T) {
 			ts[1].initTraft0(lid(3, 2), lid(4, 1), "x=1")
 			ts[2].initTraft0(lid(1, 3), lid(4, 2), "x=1")
 
-			go ts[0].VoteLoop()
-			go ts[1].VoteLoop()
-			go ts[2].VoteLoop()
+			go ts[0].ElectLoop()
+			go ts[1].ElectLoop()
+			go ts[2].ElectLoop()
 
 			// only one succ to elect.
 			// In 1 second, there wont be another winning election.
@@ -565,7 +565,7 @@ func TestTRaft_VoteLoop(t *testing.T) {
 			ts[4].Stop()
 
 			ts[1].Status[1].VotedFor = lid(3, 1)
-			go ts[1].VoteLoop()
+			go ts[1].ElectLoop()
 
 			// only one succ to elect.
 			// In 1 second, there wont be another winning election.
@@ -619,7 +619,7 @@ func TestTRaft_VoteLoop(t *testing.T) {
 			ts[1].Logs[4].Overrides = bm(0, 4)
 			ts[1].Status[1].Accepted = bm(0, 4)
 
-			go ts[1].VoteLoop()
+			go ts[1].ElectLoop()
 
 			// only one succ to elect.
 			// In 1 second, there wont be another winning election.
@@ -681,7 +681,7 @@ func TestTRaft_Propose(t *testing.T) {
 			}, reply)
 
 			// elect ts[1]
-			go ts[1].VoteLoop()
+			go ts[1].ElectLoop()
 
 			waitForMsg(ts, map[string]int{
 				"vote-win 004#001": 1,
@@ -708,7 +708,7 @@ func TestTRaft_Propose(t *testing.T) {
 			mems := ts[1].Config.Members
 
 			// elect ts[1]
-			go ts[1].VoteLoop()
+			go ts[1].ElectLoop()
 
 			waitForMsg(ts, map[string]int{
 				"vote-win 004#001": 1,

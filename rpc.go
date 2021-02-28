@@ -12,11 +12,11 @@ import (
 
 var (
 	meth = struct{
-		LogForward, Vote, Propose string
+		LogForward, Elect, Propose string
 	}{
 		LogForward: "LogForward",
-		Vote: "Vote",
-		Propose: "Propose",
+		Elect:      "Elect",
+		Propose:    "Propose",
 	}
 )
 
@@ -42,7 +42,7 @@ type rpcSession struct {
 	// cluster must not be modified by other goroutine.
 	cluster *Cluster
 
-	// the method name, one of "Vote", "LogForward" and "Propose"
+	// the method name, one of "Elect", "LogForward" and "Propose"
 	method string
 
 	// the request body
@@ -178,8 +178,8 @@ func rpcToPeer(ri ReplicaInfo, sess *rpcSession) *rpcResult {
 // method name is one of the RPC func defined in traft.proto.
 func newReply(method string) proto.Message {
 	switch method {
-	case "Vote":
-		return &VoteReply{}
+	case "Elect":
+		return &ElectReply{}
 	case "LogForward":
 		return &LogForwardReply{}
 	case "Propose":

@@ -1,11 +1,11 @@
 package traft
 
-import context "context"
+import "context"
 
-func (tr *TRaft) Vote(ctx context.Context, req *VoteReq) (*VoteReply, error) {
-	var reply *VoteReply
+func (tr *TRaft) Elect(ctx context.Context, req *ElectReq) (*ElectReply, error) {
+	var reply *ElectReply
 	rst := tr.query( func() error {
-		reply= tr.hdlVoteReq(req)
+		reply= tr.hdlElectReq(req)
 		return nil
 	})
 	_ = rst

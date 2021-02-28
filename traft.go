@@ -143,8 +143,8 @@ func (tr *TRaft) StartMainLoop() {
 }
 
 func (tr *TRaft) StartVoteLoop() {
-	tr.goit(tr.VoteLoop)
-	lg.Infow("Start VoteLoop")
+	tr.goit(tr.ElectLoop)
+	lg.Infow("Start ElectLoop")
 }
 
 func (tr *TRaft) Stop() {

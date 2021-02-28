@@ -10,7 +10,7 @@ func TestVoteReply_Pop(t *testing.T) {
 
 	ta := require.New(t)
 
-	vr := &VoteReply{
+	vr := &ElectReply{
 		Logs: []*LogRecord{
 			NewRecord(NewLeaderId(1, 2), 5, nil),
 			NewRecord(NewLeaderId(1, 2), 7, nil),

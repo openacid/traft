@@ -10,7 +10,7 @@ import (
 )
 
 // run forever to elect itself as leader if there is no leader in this cluster.
-func (tr *TRaft) VoteLoop() {
+func (tr *TRaft) ElectLoop() {
 
 	id := tr.Id
 
@@ -81,7 +81,7 @@ func (tr *TRaft) VoteLoop() {
 
 		tr.sendMsg("vote-start", currVote.ShortStr(), logst)
 
-		voteReplies, err, higher := VoteOnce(
+		voteReplies, err, higher := ElectOnce(
 			currVote,
 			logst,
 			config,
@@ -151,24 +151,24 @@ func (tr *TRaft) VoteLoop() {
 }
 
 // returns:
-// VoteReply-s: if vote granted by a quorum, returns collected replies.
+// ElectReply-s: if vote granted by a quorum, returns collected replies.
 //				Otherwise returns nil.
 // error: ErrStaleLog, ErrStaleTermId, ErrTimeout.
 // higherTerm: if seen, upgrade term and retry
-func VoteOnce(
+func ElectOnce(
 	candidate *LeaderId,
 	logStatus *LogStatus,
 	cluster *Cluster,
-) ([]*VoteReply, error, int64) {
+) ([]*ElectReply, error, int64) {
 
 	// TODO vote need cluster id:
 	// a stale member may try to elect on another cluster.
 
 	id := candidate.Id
 
-	replies := make([]*VoteReply, 0)
+	replies := make([]*ElectReply, 0)
 
-	req := &VoteReq{
+	req := &ElectReq{
 		Candidate: candidate,
 		Committer: logStatus.GetCommitter(),
 		Accepted:  logStatus.GetAccepted(),
@@ -176,7 +176,7 @@ func VoteOnce(
 
 	type voteRst struct {
 		from  *ReplicaInfo
-		reply *VoteReply
+		reply *ElectReply
 		err   error
 	}
 
@@ -189,7 +189,7 @@ func VoteOnce(
 
 		go func(rinfo ReplicaInfo, ch chan *voteRst) {
 			rpcTo(rinfo.Addr, func(cli TRaftClient, ctx context.Context) {
-				reply, err := cli.Vote(ctx, req)
+				reply, err := cli.Elect(ctx, req)
 				ch <- &voteRst{&rinfo, reply, err}
 			})
 		}(*rinfo, ch)
@@ -258,7 +258,7 @@ func VoteOnce(
 }
 
 // no lock protect, must be called by TRaft.Loop()
-func (tr *TRaft) hdlVoteReq(req *VoteReq) *VoteReply {
+func (tr *TRaft) hdlElectReq(req *ElectReq) *ElectReply {
 
 	id := tr.Id
 
@@ -266,7 +266,7 @@ func (tr *TRaft) hdlVoteReq(req *VoteReq) *VoteReply {
 
 	// A vote reply just send back a voter's status.
 	// It is the candidate's responsibility to check if a voter granted it.
-	repl := &VoteReply{
+	repl := &ElectReply{
 		Id:        id,
 		VotedFor:  me.VotedFor.Clone(),
 		Committer: me.Committer.Clone(),
@@ -326,15 +326,15 @@ func (tr *TRaft) hdlVoteReq(req *VoteReq) *VoteReply {
 
 	logs := make([]*LogRecord, 0)
 
-	lg.Infow("hdlVoteReq", "me.Accepted", me.Accepted)
-	lg.Infow("hdlVoteReq", "req.Accepted", req.Accepted)
+	lg.Infow("hdlElectReq", "me.Accepted", me.Accepted)
+	lg.Infow("hdlElectReq", "req.Accepted", req.Accepted)
 	start := me.Accepted.Offset
 	end := me.Accepted.Len()
 	for i := start; i < end; i++ {
 		if me.Accepted.Get(i) != 0 && req.Accepted.Get(i) == 0 {
 			r := tr.Logs[i-tr.LogOffset]
 			logs = append(logs, r)
-			lg.Infow("hdlVoteReq:send-log", "r", r)
+			lg.Infow("hdlElectReq:send-log", "r", r)
 		}
 	}
 
@@ -344,7 +344,7 @@ func (tr *TRaft) hdlVoteReq(req *VoteReq) *VoteReply {
 }
 
 // establishLeadership updates leader state when a election approved by a quorum.
-func (tr *TRaft) establishLeadership(currVote *LeaderId, replies []*VoteReply) {
+func (tr *TRaft) establishLeadership(currVote *LeaderId, replies []*ElectReply) {
 
 	me := tr.Status[tr.Id]
 
@@ -376,7 +376,7 @@ func (tr *TRaft) establishLeadership(currVote *LeaderId, replies []*VoteReply) {
 }
 
 // find the max committer log to fill in local log holes.
-func (tr *TRaft) mergeFollowerLogs(votes []*VoteReply) {
+func (tr *TRaft) mergeFollowerLogs(votes []*ElectReply) {
 
 	// TODO if the leader chose Logs[i] from replica `r`, e.g. R[r].Logs[i]
 	// then the logs R[r].Logs[:i] are safe to choose.
@@ -418,7 +418,7 @@ func (tr *TRaft) mergeFollowerLogs(votes []*VoteReply) {
 }
 
 // getLog returns one log record if a log  with the specified lsn presents in any vote replies.
-func getLog(lsn int64, replies []*VoteReply) *LogRecord {
+func getLog(lsn int64, replies []*ElectReply) *LogRecord {
 	var rec *LogRecord
 	for _, vr := range replies {
 		r := vr.PopRecord(lsn)
@@ -439,7 +439,7 @@ func getLog(lsn int64, replies []*VoteReply) *LogRecord {
 
 // chooseMaxCommitterReplies chooses the max Committer and the vote-replies with the max Committer.
 // logs with Committer smaller than me are discarded too.
-func (tr *TRaft) chooseMaxCommitterReplies(replies []*VoteReply) (*LeaderId, []*VoteReply) {
+func (tr *TRaft) chooseMaxCommitterReplies(replies []*ElectReply) (*LeaderId, []*ElectReply) {
 	me := tr.Status[tr.Id]
 	maxCommitter := me.Committer
 	for _, v := range replies {
@@ -447,7 +447,7 @@ func (tr *TRaft) chooseMaxCommitterReplies(replies []*VoteReply) (*LeaderId, []*
 			maxCommitter = v.Committer
 		}
 	}
-	chosen := make([]*VoteReply, 0, len(replies))
+	chosen := make([]*ElectReply, 0, len(replies))
 	for _, v := range replies {
 		if v.Committer.Cmp(maxCommitter) == 0 {
 			chosen = append(chosen, v)
