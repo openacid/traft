@@ -31,8 +31,8 @@ func join(ss ...string) string {
 
 var basePort = int64(5500)
 
-// serveCluster starts a grpc server for every replica.
-func serveCluster(ids []int64) []*TRaft {
+// newCluster starts a grpc server for every replica.
+func newCluster(ids []int64) []*TRaft {
 
 	cluster := make(map[int64]string)
 
@@ -46,13 +46,18 @@ func serveCluster(ids []int64) []*TRaft {
 	for _, id := range ids {
 		srv := NewTRaft(id, cluster)
 		trafts = append(trafts, srv)
-
-		// in a test env, only start server
-		// manually start loops
-		srv.StartServer()
-		srv.StartMainLoop()
 	}
 
 	return trafts
+}
+
+func startCluster(ts []*TRaft) {
+
+	for _, t := range ts {
+		// in a test env, only start server
+		// manually start loops
+		t.StartServer()
+		t.StartMainLoop()
+	}
 }
 

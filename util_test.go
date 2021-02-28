@@ -13,15 +13,10 @@ func Test_serveCluster(t *testing.T) {
 
 	ids := []int64{1, 2, 3}
 
-	trafts := serveCluster(ids)
+	ts := newCluster(ids)
+	defer stopAll(ts)
 
-	defer func() {
-		for _, s := range trafts {
-			s.Stop()
-		}
-	}()
-
-	for i, tr := range trafts {
+	for i, tr := range ts {
 		// 110 101 011
 		ta.Equal([]uint64{3, 5, 6}, tr.Config.Quorums)
 

@@ -44,10 +44,11 @@ func withCluster(t *testing.T,
 
 	lid := NewLeaderId
 
-	ts := serveCluster(ids)
+	ts := newCluster(ids)
 	for i, id := range ids {
 		ts[i].initTraft(lid(0, 0), lid(0, 0), []int64{}, nil, nil, lid(0, id))
 	}
+	startCluster(ts)
 
 	t.Run(name, func(t *testing.T) {
 		f(t, ts)
@@ -65,20 +66,22 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 	ids := []int64{1, 2, 3}
 	id := int64(1)
 
-	ts := serveCluster(ids)
-	defer stopAll(ts)
-
-	t1 := ts[0]
-
 	testVote := func(
 		cand candStat,
 		voter voterStat,
-	) *ElectReply {
+	) (*ElectReply, int64) {
+
+		ts := newCluster(ids)
+
+		t1 := ts[0]
 
 		t1.initTraft(
 			voter.committer, voter.author, voter.logs, voter.nilLogs, nil,
 			voter.votedFor,
 		)
+
+		startCluster(ts)
+		defer stopAll(ts)
 
 		req := &ElectReq{
 			Candidate: cand.candidateId,
@@ -97,7 +100,7 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 			}
 		})
 
-		return reply
+		return reply, t1.Status[id].VoteExpireAt
 	}
 
 	lid := NewLeaderId
@@ -112,7 +115,7 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 			candStat{candidateId: lid(2, 2), committer: lid(1, id), logs: []int64{5}},
 			voterStat{votedFor: lid(0, id), committer: lid(0, id), author: lid(1, id), logs: []int64{5, 6}},
 			wantVoteReply{
-				OK:true,
+				OK:           true,
 				votedFor:     lid(2, 2),
 				committer:    lid(0, id),
 				allLogBitmap: bm(0, 5, 6),
@@ -126,7 +129,7 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 			candStat{candidateId: lid(2, 2), committer: lid(1, id), logs: []int64{5}},
 			voterStat{votedFor: lid(0, id), committer: lid(0, id), author: lid(1, id), logs: []int64{5, 6, 7}, nilLogs: map[int64]bool{6: true}},
 			wantVoteReply{
-				OK:true,
+				OK:           true,
 				votedFor:     lid(2, 2),
 				committer:    lid(0, id),
 				allLogBitmap: bm(0, 5, 6, 7),
@@ -139,7 +142,7 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 			candStat{candidateId: lid(2, 2), committer: lid(0, id), logs: []int64{5, 6}},
 			voterStat{votedFor: lid(1, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
 			wantVoteReply{
-				OK:false,
+				OK:           false,
 				votedFor:     lid(1, id),
 				committer:    lid(1, id),
 				allLogBitmap: bm(0, 5, 6),
@@ -154,7 +157,7 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 			candStat{candidateId: lid(2, 2), committer: lid(1, id), logs: []int64{5}},
 			voterStat{votedFor: lid(1, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
 			wantVoteReply{
-				OK:false,
+				OK:           false,
 				votedFor:     lid(1, id),
 				committer:    lid(1, id),
 				allLogBitmap: bm(0, 5, 6),
@@ -168,7 +171,7 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 			candStat{candidateId: lid(2, 2), committer: lid(1, id), logs: []int64{5, 6}},
 			voterStat{votedFor: lid(3, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
 			wantVoteReply{
-				OK:false,
+				OK:           false,
 				votedFor:     lid(3, id),
 				committer:    lid(1, id),
 				allLogBitmap: bm(0, 5, 6),
@@ -182,7 +185,7 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 			candStat{candidateId: lid(3, id-1), committer: lid(1, id), logs: []int64{5, 6}},
 			voterStat{votedFor: lid(3, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
 			wantVoteReply{
-				OK:false,
+				OK:           false,
 				votedFor:     lid(3, id),
 				committer:    lid(1, id),
 				allLogBitmap: bm(0, 5, 6),
@@ -192,12 +195,12 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 	}
 
 	for i, c := range cases {
-		reply := testVote(c.cand, c.voter)
+		reply, gotExpire := testVote(c.cand, c.voter)
 
 		ta.Equal(
 			c.want,
 			wantVoteReply{
-				OK:reply.OK,
+				OK:           reply.OK,
 				votedFor:     reply.VotedFor,
 				committer:    reply.Committer,
 				allLogBitmap: reply.Accepted,
@@ -205,7 +208,12 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 			},
 			"%d-th: case: %+v", i+1, c)
 
-		ta.InDelta(uSecondI64()+leaderLease, t1.Status[id].VoteExpireAt, 1000*1000*1000)
+		if reply.OK {
+			ta.InDelta(uSecondI64()+leaderLease, gotExpire, 1000*1000*1000)
+		} else {
+			ta.Equal(int64(0), gotExpire)
+
+		}
 	}
 }
 
@@ -346,11 +354,13 @@ func TestTRaft_query(t *testing.T) {
 	id1 := int64(1)
 	lid := NewLeaderId
 
-	ts := serveCluster(ids)
-	defer stopAll(ts)
+	ts := newCluster(ids)
 
 	t1 := ts[0]
 	t1.initTraft(lid(1, 2), lid(3, 4), []int64{5}, nil, nil, lid(2, id1))
+
+	startCluster(ts)
+	defer stopAll(ts)
 
 	got := t1.query(func() interface{} {
 		return ExportLogStatus(t1.Status[t1.Id])
@@ -419,7 +429,7 @@ func waitForMsg(ts []*TRaft, msgs map[string]int) {
 	}
 }
 
-func waitForAnyMsg(ts []*TRaft, msgs []string, total int) []string{
+func waitForAnyMsg(ts []*TRaft, msgs []string, total int) []string {
 
 	rst := []string{}
 
@@ -435,17 +445,17 @@ func waitForAnyMsg(ts []*TRaft, msgs []string, total int) []string{
 
 		lg.Infow("require-msg", "msgs", msgs, "total", total)
 
-		if total == 0{
+		if total == 0 {
 			return rst
 		}
 	}
 }
 
-func findLeader(ts []*TRaft) int64{
+func findLeader(ts []*TRaft) int64 {
 	votes := make([]int, len(ts))
 	for i, t := range ts {
 		id := t.Status[int64(i)].VotedFor.Id
-		votes[id] ++
+		votes[id]++
 		if votes[id] > len(ts)/2 {
 			// TODO joint consensus
 			return id
@@ -526,11 +536,11 @@ func TestTRaft_VoteLoop(t *testing.T) {
 			got := waitForAnyMsg(ts, []string{
 				"vote-win",
 				"vote-fail",
-			},3)
+			}, 3)
 
 			winner := findLeader(ts)
 
-			ta.Contains(strings.Join(got,";"),
+			ta.Contains(strings.Join(got, ";"),
 				fmt.Sprintf("Id=%d vote-win", winner))
 		})
 
