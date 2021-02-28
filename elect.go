@@ -267,6 +267,7 @@ func (tr *TRaft) hdlElectReq(req *ElectReq) *ElectReply {
 	// A vote reply just send back a voter's status.
 	// It is the candidate's responsibility to check if a voter granted it.
 	repl := &ElectReply{
+		OK:false,
 		Id:        id,
 		VotedFor:  me.VotedFor.Clone(),
 		Committer: me.Committer.Clone(),
@@ -320,6 +321,7 @@ func (tr *TRaft) hdlElectReq(req *ElectReq) *ElectReply {
 
 	me.VotedFor = req.Candidate.Clone()
 	me.VoteExpireAt = uSecondI64() + leaderLease
+	repl.OK = true
 	repl.VotedFor = req.Candidate.Clone()
 
 	// send back the logs I have but the candidate does not.

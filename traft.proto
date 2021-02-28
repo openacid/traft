@@ -215,22 +215,13 @@ message ElectReq {
 }
 
 message ElectReply {
+    bool OK = 10;
+
     // the replica id this reply comes from
     int64 Id = 1;
 
-    // voter's term.
-    // If voter's term is greater, sender should upgrade its own term and retry.
-
-    // On which accepted term voter's log are written.
-    // If voter accepted term >= sender's accepted term,
-    // voter send back the logs that only voter has.
-    // Otherwise, voter's log can not be committed, no need to send.
-    //
-    // If a voter seen a bigger accepted term than its own.
-    // that means its logs are not committed.
-
     // voted for a candidate or the previous voted other leader.
-    LeaderId VotedFor = 10;
+    LeaderId VotedFor = 2;
 
     // latest log committer.
     LeaderId Committer = 4;

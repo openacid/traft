@@ -28,6 +28,7 @@ type voterStat struct {
 }
 
 type wantVoteReply struct {
+	OK           bool
 	votedFor     *LeaderId
 	committer    *LeaderId
 	allLogBitmap *TailBitmap
@@ -111,6 +112,7 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 			candStat{candidateId: lid(2, 2), committer: lid(1, id), logs: []int64{5}},
 			voterStat{votedFor: lid(0, id), committer: lid(0, id), author: lid(1, id), logs: []int64{5, 6}},
 			wantVoteReply{
+				OK:true,
 				votedFor:     lid(2, 2),
 				committer:    lid(0, id),
 				allLogBitmap: bm(0, 5, 6),
@@ -124,6 +126,7 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 			candStat{candidateId: lid(2, 2), committer: lid(1, id), logs: []int64{5}},
 			voterStat{votedFor: lid(0, id), committer: lid(0, id), author: lid(1, id), logs: []int64{5, 6, 7}, nilLogs: map[int64]bool{6: true}},
 			wantVoteReply{
+				OK:true,
 				votedFor:     lid(2, 2),
 				committer:    lid(0, id),
 				allLogBitmap: bm(0, 5, 6, 7),
@@ -136,6 +139,7 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 			candStat{candidateId: lid(2, 2), committer: lid(0, id), logs: []int64{5, 6}},
 			voterStat{votedFor: lid(1, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
 			wantVoteReply{
+				OK:false,
 				votedFor:     lid(1, id),
 				committer:    lid(1, id),
 				allLogBitmap: bm(0, 5, 6),
@@ -150,6 +154,7 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 			candStat{candidateId: lid(2, 2), committer: lid(1, id), logs: []int64{5}},
 			voterStat{votedFor: lid(1, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
 			wantVoteReply{
+				OK:false,
 				votedFor:     lid(1, id),
 				committer:    lid(1, id),
 				allLogBitmap: bm(0, 5, 6),
@@ -163,6 +168,7 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 			candStat{candidateId: lid(2, 2), committer: lid(1, id), logs: []int64{5, 6}},
 			voterStat{votedFor: lid(3, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
 			wantVoteReply{
+				OK:false,
 				votedFor:     lid(3, id),
 				committer:    lid(1, id),
 				allLogBitmap: bm(0, 5, 6),
@@ -176,6 +182,7 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 			candStat{candidateId: lid(3, id-1), committer: lid(1, id), logs: []int64{5, 6}},
 			voterStat{votedFor: lid(3, id), committer: lid(1, id), author: lid(1, id), logs: []int64{5, 6}},
 			wantVoteReply{
+				OK:false,
 				votedFor:     lid(3, id),
 				committer:    lid(1, id),
 				allLogBitmap: bm(0, 5, 6),
@@ -190,6 +197,7 @@ func TestTRaft_hdlVoteReq(t *testing.T) {
 		ta.Equal(
 			c.want,
 			wantVoteReply{
+				OK:reply.OK,
 				votedFor:     reply.VotedFor,
 				committer:    reply.Committer,
 				allLogBitmap: reply.Accepted,
